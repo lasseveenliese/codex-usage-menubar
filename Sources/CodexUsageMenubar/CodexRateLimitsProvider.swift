@@ -194,13 +194,19 @@ final class CodexRateLimitsProvider {
         guard
             let primaryDisplayPercent = launchInt(
                 flag: "--simulate-primary-used-percent",
-                environmentKey: "CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT",
+                environmentKeys: [
+                    "CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT",
+                    "CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT"
+                ],
                 arguments: arguments,
                 environment: environment
             ),
             let secondaryDisplayPercent = launchInt(
                 flag: "--simulate-secondary-used-percent",
-                environmentKey: "CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT",
+                environmentKeys: [
+                    "CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_USED_PERCENT",
+                    "CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT"
+                ],
                 arguments: arguments,
                 environment: environment
             )
@@ -238,11 +244,11 @@ final class CodexRateLimitsProvider {
 
     private static func launchInt(
         flag: String,
-        environmentKey: String,
+        environmentKeys: [String],
         arguments: [String],
         environment: [String: String]
     ) -> Int? {
-        guard let value = launchValue(flag: flag, environmentKey: environmentKey, arguments: arguments, environment: environment) else {
+        guard let value = launchValue(flag: flag, environmentKeys: environmentKeys, arguments: arguments, environment: environment) else {
             return nil
         }
 
@@ -251,7 +257,7 @@ final class CodexRateLimitsProvider {
 
     private static func launchValue(
         flag: String,
-        environmentKey: String,
+        environmentKeys: [String],
         arguments: [String],
         environment: [String: String]
     ) -> String? {
@@ -259,11 +265,13 @@ final class CodexRateLimitsProvider {
             return arguments[index + 1]
         }
 
-        guard let value = environment[environmentKey], !value.isEmpty else {
-            return nil
+        for key in environmentKeys {
+            if let value = environment[key], !value.isEmpty {
+                return value
+            }
         }
 
-        return value
+        return nil
     }
 }
 
