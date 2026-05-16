@@ -53,6 +53,20 @@ enum StatusText {
         return "Updated \(dateTimeString(for: lastUpdatedAt, timeZone: timeZone))"
     }
 
+    static func formattedCreditsBalance(_ balance: String) -> String {
+        guard let value = Decimal(string: balance, locale: Locale(identifier: "en_US_POSIX")) else {
+            return balance
+        }
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = .autoupdatingCurrent
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+
+        return formatter.string(from: value as NSDecimalNumber) ?? balance
+    }
+
     static func shortClockString(for date: Date, timeZone: TimeZone = .current) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

@@ -113,7 +113,7 @@ final class CodexStatusModel: ObservableObject {
         }
 
         if let balance = credits.balance, !balance.isEmpty {
-            return balance
+            return StatusText.formattedCreditsBalance(balance)
         }
 
         return credits.hasCredits ? "available" : "0"
