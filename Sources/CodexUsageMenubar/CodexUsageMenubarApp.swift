@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItemController = StatusItemController()
     }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        statusItemController?.closePopover()
+    }
 }
 
 @MainActor
@@ -25,6 +29,8 @@ final class StatusItemController {
     private let model = CodexStatusModel()
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    private var localEventMonitor: Any?
+    private var globalEventMonitor: Any?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -45,6 +51,15 @@ final class StatusItemController {
             self?.updateStatusItem()
         }
 
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.closePopoverIfNeeded(for: event)
+            return event
+        }
+
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.closePopover()
+        }
+
         Task {
             await model.start()
             updateStatusItem()
@@ -56,15 +71,34 @@ final class StatusItemController {
         guard let button = statusItem.button else { return }
 
         if popover.isShown {
-            popover.performClose(sender)
+            closePopover()
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }
 
+    func closePopover() {
+        guard popover.isShown else { return }
+        popover.performClose(nil)
+    }
+
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         button.attributedTitle = statusItemTitle()
+    }
+
+    private func closePopoverIfNeeded(for event: NSEvent) {
+        guard popover.isShown else { return }
+        guard let popoverWindow = popover.contentViewController?.view.window else {
+            closePopover()
+            return
+        }
+
+        if event.window === popoverWindow || event.window === statusItem.button?.window {
+            return
+        }
+
+        closePopover()
     }
 
     private func statusItemTitle() -> NSAttributedString {
