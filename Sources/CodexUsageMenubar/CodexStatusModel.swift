@@ -1,16 +1,25 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 
 @MainActor
 final class CodexStatusModel: ObservableObject {
+    private static let launchAtLoginPreferenceKey = "launchAtLoginEnabled"
+
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published var launchAtLoginEnabled: Bool
+    @Published private(set) var isUpdatingLaunchAtLogin = false
     var onChange: (() -> Void)?
 
     private let provider = CodexRateLimitsProvider()
     private var refreshLoopTask: Task<Void, Never>?
+
+    init() {
+        launchAtLoginEnabled = Self.readLaunchAtLoginPreference()
+    }
 
     deinit {
         refreshLoopTask?.cancel()
@@ -38,6 +47,28 @@ final class CodexStatusModel: ObservableObject {
         statusText = nextSnapshot.map(StatusText.format(snapshot:)) ?? "Codex -- | weekly --"
         lastUpdatedAt = Date()
         onChange?()
+    }
+
+    func setLaunchAtLoginEnabled(_ enabled: Bool) async {
+        guard !isUpdatingLaunchAtLogin else { return }
+        let previousValue = launchAtLoginEnabled
+        launchAtLoginEnabled = enabled
+        storeLaunchAtLoginPreference(enabled)
+        isUpdatingLaunchAtLogin = true
+        defer {
+            isUpdatingLaunchAtLogin = false
+        }
+
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try await SMAppService.mainApp.unregister()
+            }
+        } catch {
+            launchAtLoginEnabled = previousValue
+            storeLaunchAtLoginPreference(previousValue)
+        }
     }
 
     var primaryAvailablePercent: Int? {
@@ -82,6 +113,19 @@ final class CodexStatusModel: ObservableObject {
 
     var secondaryMenuBarTone: MenuBarTone {
         MenuBarTone.from(availablePercent: secondaryAvailablePercent ?? 100)
+    }
+
+    private static func readLaunchAtLoginPreference() -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.launchAtLoginPreferenceKey) != nil {
+            return defaults.bool(forKey: Self.launchAtLoginPreferenceKey)
+        }
+
+        return SMAppService.mainApp.status == .enabled
+    }
+
+    private func storeLaunchAtLoginPreference(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.launchAtLoginPreferenceKey)
     }
 
     private func statusSegmentText(title: String, availablePercent: Int?) -> String {

@@ -188,6 +188,17 @@ private struct MenuContent: View {
                 )
             }
 
+            Toggle("Launch at login", isOn: Binding(
+                get: { model.launchAtLoginEnabled },
+                set: { newValue in
+                    Task {
+                        await model.setLaunchAtLoginEnabled(newValue)
+                    }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .disabled(model.isUpdatingLaunchAtLogin)
+
             HStack(alignment: .top, spacing: 10) {
                 Button {
                     Task {

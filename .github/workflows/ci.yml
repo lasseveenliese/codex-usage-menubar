@@ -29,16 +29,21 @@ jobs:
         id: package
         run: |
           APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
-          ZIP_PATH="$RUNNER_TEMP/CodexUsageMenubar.app.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          STAGING_DIR="$RUNNER_TEMP/CodexUsageMenubar-dmg"
+          DMG_PATH="$RUNNER_TEMP/CodexUsageMenubar.dmg"
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR"
+          cp -R "$APP_PATH" "$STAGING_DIR/"
+          ln -s /Applications "$STAGING_DIR/Applications"
+          hdiutil create -volname "Codex Usage Menubar" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload app artifact
         id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: codex-usage-menubar-app
-          path: ${{ steps.package.outputs.zip_path }}
+          path: ${{ steps.package.outputs.dmg_path }}
           if-no-files-found: error
           retention-days: 14
 
@@ -49,7 +54,7 @@ jobs:
           script: |
             const marker = '<!-- codex-usage-menubar-artifact -->';
             const body = `${marker}
-            Latest app artifact: [CodexUsageMenubar.app.zip](${process.env.ARTIFACT_URL})
+            Latest app artifact: [CodexUsageMenubar.dmg](${process.env.ARTIFACT_URL})
 
             Run: ${process.env.RUN_URL}
             `;
