@@ -54,7 +54,7 @@ jobs:
           script: |
             const marker = '<!-- codex-usage-menubar-artifact -->';
             const body = `${marker}
-            Latest app artifact: [CodexUsageMenubar.dmg](<${process.env.ARTIFACT_URL}>) inside a GitHub Actions artifact ZIP
+            Latest app artifact: [CodexUsageMenubar.dmg](${process.env.ARTIFACT_URL})
 
             Run: ${process.env.RUN_URL}
             `;
