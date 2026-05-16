@@ -22,17 +22,22 @@ jobs:
       - name: Package app
         run: |
           APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
-          ZIP_PATH="$RUNNER_TEMP/CodexUsageMenubar.app.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
+          STAGING_DIR="$RUNNER_TEMP/CodexUsageMenubar-dmg"
+          DMG_PATH="$RUNNER_TEMP/CodexUsageMenubar.dmg"
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR"
+          cp -R "$APP_PATH" "$STAGING_DIR/"
+          ln -s /Applications "$STAGING_DIR/Applications"
+          hdiutil create -volname "Codex Usage Menubar" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
       - name: Publish latest release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest "$ZIP_PATH" --clobber
+            gh release upload latest "$DMG_PATH" --clobber
             gh release edit latest --notes "Automated build from $GITHUB_SHA"
           else
-            gh release create latest "$ZIP_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create latest "$DMG_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
           fi

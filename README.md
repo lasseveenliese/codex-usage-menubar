@@ -30,10 +30,12 @@ The app only reads local Codex data and does not send usage information to exter
 
 Use this if you want the packaged app without cloning the repository.
 
-[CodexUsageMenubar.app.zip](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.app.zip)
+[CodexUsageMenubar.dmg](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.dmg)
+
+Open the DMG, drag `Codex Usage Menubar.app` into `Applications`, then open it from there.
 
 ⚠️ The download is not notarized by Apple yet, so macOS may warn on first open.
-If you trust it, right-click the app and choose `Open`, or use `System Settings > Privacy & Security > Open Anyway`.
+If you trust it, right-click the app in `Applications` and choose `Open`, or use `System Settings > Privacy & Security > Open Anyway`.
 
 ## Notes
 
