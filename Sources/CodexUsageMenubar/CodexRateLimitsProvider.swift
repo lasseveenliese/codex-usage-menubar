@@ -95,12 +95,18 @@ enum StatusText {
 }
 
 final class CodexRateLimitsProvider {
+    private let appServerClient = CodexAppServerRateLimitsClient()
+
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
         if let simulatedSnapshot = Self.simulationSnapshot(
             arguments: ProcessInfo.processInfo.arguments,
             environment: ProcessInfo.processInfo.environment
         ) {
             return simulatedSnapshot
+        }
+
+        if let liveSnapshot = try? appServerClient.fetchLatestSnapshot() {
+            return liveSnapshot
         }
 
         return try scanLatestSnapshot()
