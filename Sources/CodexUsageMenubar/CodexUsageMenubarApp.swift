@@ -188,6 +188,18 @@ private struct MenuContent: View {
                 )
             }
 
+            HStack {
+                Text("Credits")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                Text(model.creditsText)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
             Toggle("Launch at login", isOn: Binding(
                 get: { model.launchAtLoginEnabled },
                 set: { newValue in

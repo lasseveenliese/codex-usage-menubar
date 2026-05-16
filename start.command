@@ -119,9 +119,7 @@ SWIFT
 }
 
 sign_app_bundle() {
-  xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.provenance "$APP_PATH" 2>/dev/null || true
+  xattr -cr "$APP_PATH" 2>/dev/null || true
   codesign --force --deep --sign - "$APP_PATH" >/dev/null
   xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
   xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true

@@ -172,6 +172,13 @@ private struct AppServerRateLimitsResponse: Decodable {
 private struct AppServerRateLimitSnapshot: Decodable {
     let primary: AppServerRateLimitWindow?
     let secondary: AppServerRateLimitWindow?
+    let credits: AppServerCreditsSnapshot?
+}
+
+private struct AppServerCreditsSnapshot: Decodable {
+    let balance: String?
+    let hasCredits: Bool
+    let unlimited: Bool
 }
 
 private struct AppServerRateLimitWindow: Decodable {
@@ -196,7 +203,10 @@ extension CodexRateLimitsSnapshot {
                 usedPercent: secondary.usedPercent,
                 windowMinutes: secondary.windowDurationMins,
                 resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-            )
+            ),
+            credits: snapshot.credits.map {
+                .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
+            }
         )
     }
 }
