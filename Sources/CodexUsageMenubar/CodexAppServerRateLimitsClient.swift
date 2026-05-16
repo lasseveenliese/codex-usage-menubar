@@ -16,8 +16,22 @@ final class CodexAppServerRateLimitsClient {
         let output = try runProxy(socketPath: socketURL.path)
         let response = try parseRateLimitsResponse(from: output)
 
-        if let codexSnapshot = response.rateLimitsByLimitId?["codex"].flatMap(CodexRateLimitsSnapshot.init) {
-            return codexSnapshot
+        if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
+            return CodexRateLimitsSnapshot(
+                primary: .init(
+                    usedPercent: codexSnapshot.primary?.usedPercent ?? response.rateLimits.primary?.usedPercent ?? 0,
+                    windowMinutes: codexSnapshot.primary?.windowDurationMins ?? response.rateLimits.primary?.windowDurationMins,
+                    resetsAt: codexSnapshot.primary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.primary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                ),
+                secondary: .init(
+                    usedPercent: codexSnapshot.secondary?.usedPercent ?? response.rateLimits.secondary?.usedPercent ?? 0,
+                    windowMinutes: codexSnapshot.secondary?.windowDurationMins ?? response.rateLimits.secondary?.windowDurationMins,
+                    resetsAt: codexSnapshot.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                ),
+                credits: (codexSnapshot.credits ?? response.rateLimits.credits).map {
+                    .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
+                }
+            )
         }
 
         if let legacySnapshot = CodexRateLimitsSnapshot(response.rateLimits) {
