@@ -136,12 +136,15 @@ final class CodexAppServerRateLimitsClient {
         ]
 
         let inputHandle = inputPipe.fileHandleForWriting
+        defer {
+            inputHandle.closeFile()
+        }
+
         for line in requestLines {
             guard let data = line.data(using: .utf8) else { continue }
             inputHandle.write(data)
             inputHandle.write(Data([0x0A]))
         }
-        inputHandle.closeFile()
 
         let deadline = Date().addingTimeInterval(3)
         while process.isRunning && Date() < deadline {
