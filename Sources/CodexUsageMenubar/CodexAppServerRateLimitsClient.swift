@@ -8,12 +8,35 @@ final class CodexAppServerRateLimitsClient {
     }
 
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
-        let socketURL = try controlSocketURL()
-        guard FileManager.default.fileExists(atPath: socketURL.path) else {
-            throw ClientError.missingSocket
+        if let directSnapshot = try? fetchSnapshot(from: .direct) {
+            return directSnapshot
         }
 
-        let output = try runProxy(socketPath: socketURL.path)
+        if let socketSnapshot = try? fetchSnapshot(from: .socket(try controlSocketURL())) {
+            return socketSnapshot
+        }
+
+        throw ClientError.invalidResponse
+    }
+
+    private enum Source {
+        case direct
+        case socket(URL)
+    }
+
+    private func fetchSnapshot(from source: Source) throws -> CodexRateLimitsSnapshot {
+        let output: Data
+
+        switch source {
+        case .direct:
+            output = try runAppServer()
+        case .socket(let socketURL):
+            guard FileManager.default.fileExists(atPath: socketURL.path) else {
+                throw ClientError.missingSocket
+            }
+            output = try runProxy(socketPath: socketURL.path)
+        }
+
         let response = try parseRateLimitsResponse(from: output)
 
         if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
@@ -41,6 +64,17 @@ final class CodexAppServerRateLimitsClient {
         throw ClientError.noRateLimitsResponse
     }
 
+    private func runAppServer() throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [
+            "-lc",
+            "codex app-server --listen stdio://"
+        ]
+
+        return try runJSONRPC(process: process)
+    }
+
     private func controlSocketURL() throws -> URL {
         let fileManager = FileManager.default
         let codexHome: URL
@@ -63,6 +97,11 @@ final class CodexAppServerRateLimitsClient {
             "-lc",
             "codex app-server proxy --sock \(Self.shellQuote(socketPath))"
         ]
+
+        return try runJSONRPC(process: process)
+    }
+
+    private func runJSONRPC(process: Process) throws -> Data {
 
         let inputPipe = Pipe()
         let outputPipe = Pipe()
