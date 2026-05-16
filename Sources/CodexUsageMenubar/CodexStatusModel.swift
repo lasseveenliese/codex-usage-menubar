@@ -1,12 +1,15 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 
 @MainActor
 final class CodexStatusModel: ObservableObject {
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var launchAtLoginEnabled = false
+    @Published private(set) var isUpdatingLaunchAtLogin = false
     var onChange: (() -> Void)?
 
     private let provider = CodexRateLimitsProvider()
@@ -17,6 +20,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     func start() async {
+        refreshLaunchAtLoginStatus()
         await refresh()
 
         guard refreshLoopTask == nil else { return }
@@ -38,6 +42,25 @@ final class CodexStatusModel: ObservableObject {
         statusText = nextSnapshot.map(StatusText.format(snapshot:)) ?? "Codex -- | weekly --"
         lastUpdatedAt = Date()
         onChange?()
+    }
+
+    func setLaunchAtLoginEnabled(_ enabled: Bool) async {
+        guard !isUpdatingLaunchAtLogin else { return }
+        isUpdatingLaunchAtLogin = true
+        defer {
+            isUpdatingLaunchAtLogin = false
+            refreshLaunchAtLoginStatus()
+        }
+
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try await SMAppService.mainApp.unregister()
+            }
+        } catch {
+            refreshLaunchAtLoginStatus()
+        }
     }
 
     var primaryAvailablePercent: Int? {
@@ -82,6 +105,10 @@ final class CodexStatusModel: ObservableObject {
 
     var secondaryMenuBarTone: MenuBarTone {
         MenuBarTone.from(availablePercent: secondaryAvailablePercent ?? 100)
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        launchAtLoginEnabled = SMAppService.mainApp.status != .notRegistered
     }
 
     private func statusSegmentText(title: String, availablePercent: Int?) -> String {

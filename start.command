@@ -11,6 +11,7 @@ ICON_SOURCE="$ROOT_DIR/assets/app-icon-source.png"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
 SIMULATION_ARGS=()
 
+rm -rf "$APP_PATH"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE"
 
 PRIMARY_SIMULATION="${CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT:-${CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT:-}}"
@@ -160,6 +161,7 @@ swiftc \
   -module-cache-path "$MODULE_CACHE" \
   "$ROOT_DIR"/Sources/CodexUsageMenubar/*.swift \
   -framework AppKit \
+  -framework ServiceManagement \
   -o "$MACOS_DIR/CodexUsageMenubar"
 
 sign_app_bundle
