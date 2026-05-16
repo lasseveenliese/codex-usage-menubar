@@ -2,6 +2,12 @@
 
 Minimal macOS menu bar app for Codex usage.
 
+## Screenshots
+
+![Codex Usage Menubar with low and critical availability](assets/codex-usage-warning-critical.png)
+
+![Codex Usage Menubar with healthy availability](assets/codex-usage-healthy.png)
+
 ## Start
 
 ```bash
