@@ -117,6 +117,16 @@ try file.write(to: outputURL)
 SWIFT
 }
 
+sign_app_bundle() {
+  xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
+  xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
+  xattr -d com.apple.provenance "$APP_PATH" 2>/dev/null || true
+  codesign --force --deep --sign - "$APP_PATH" >/dev/null
+  xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
+  xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
+  xattr -d com.apple.provenance "$APP_PATH" 2>/dev/null || true
+}
+
 cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -151,6 +161,8 @@ swiftc \
   "$ROOT_DIR"/Sources/CodexUsageMenubar/*.swift \
   -framework AppKit \
   -o "$MACOS_DIR/CodexUsageMenubar"
+
+sign_app_bundle
 
 if [[ "${BUILD_ONLY:-0}" == "1" ]]; then
   exit 0
