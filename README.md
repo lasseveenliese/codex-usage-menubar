@@ -32,10 +32,6 @@ Use this if you want the packaged app without cloning the repository.
 
 [CodexUsageMenubar.app.zip](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.app.zip)
 
-[CodexUsageMenubar.app.zip.sha256](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.app.zip.sha256)
-
-After downloading, verify it with `shasum -a 256 -c CodexUsageMenubar.app.zip.sha256`.
-
 ⚠️ The download is not notarized by Apple yet, so macOS may warn on first open.
 If you trust it, right-click the app and choose `Open`, or use `System Settings > Privacy & Security > Open Anyway`.
 

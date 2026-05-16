@@ -23,19 +23,16 @@ jobs:
         run: |
           APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
           ZIP_PATH="$RUNNER_TEMP/CodexUsageMenubar.app.zip"
-          CHECKSUM_PATH="$RUNNER_TEMP/CodexUsageMenubar.app.zip.sha256"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-          shasum -a 256 "$ZIP_PATH" | awk '{print $1 "  CodexUsageMenubar.app.zip"}' > "$CHECKSUM_PATH"
           echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
-          echo "CHECKSUM_PATH=$CHECKSUM_PATH" >> "$GITHUB_ENV"
 
       - name: Publish latest release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest "$ZIP_PATH" "$CHECKSUM_PATH" --clobber
+            gh release upload latest "$ZIP_PATH" --clobber
             gh release edit latest --notes "Automated build from $GITHUB_SHA"
           else
-            gh release create latest "$ZIP_PATH" "$CHECKSUM_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create latest "$ZIP_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
           fi
