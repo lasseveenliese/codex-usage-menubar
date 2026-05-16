@@ -1,6 +1,6 @@
 import AppKit
+import Combine
 import Foundation
-import SwiftUI
 
 @MainActor
 final class CodexStatusModel: ObservableObject {
@@ -30,23 +30,12 @@ final class CodexStatusModel: ObservableObject {
     }
 
     func refresh() async {
-        let nextState = await Task.detached(priority: .utility) { [provider] in
-            do {
-                let snapshot = try provider.fetchLatestSnapshot()
-                return CodexDisplayState(
-                    snapshot: snapshot,
-                    statusText: StatusText.format(snapshot: snapshot)
-                )
-            } catch {
-                return CodexDisplayState(
-                    snapshot: nil,
-                    statusText: "Codex -- | weekly --"
-                )
-            }
+        let nextSnapshot = await Task.detached(priority: .utility) { [provider] in
+            try? provider.fetchLatestSnapshot()
         }.value
 
-        snapshot = nextState.snapshot
-        statusText = nextState.statusText
+        snapshot = nextSnapshot
+        statusText = nextSnapshot.map(StatusText.format(snapshot:)) ?? "Codex -- | weekly --"
         lastUpdatedAt = Date()
         onChange?()
     }
@@ -104,11 +93,6 @@ final class CodexStatusModel: ObservableObject {
     }
 }
 
-private struct CodexDisplayState {
-    let snapshot: CodexRateLimitsSnapshot?
-    let statusText: String
-}
-
 enum MenuBarTone {
     case normal
     case warning
@@ -126,17 +110,6 @@ enum MenuBarTone {
         return .normal
     }
 
-    var foregroundColor: Color {
-        switch self {
-        case .normal:
-            return .black
-        case .warning:
-            return Color(nsColor: .systemOrange)
-        case .critical:
-            return Color(nsColor: .systemRed)
-        }
-    }
-
     var nsColor: NSColor {
         switch self {
         case .normal:
@@ -145,28 +118,6 @@ enum MenuBarTone {
             return .systemOrange
         case .critical:
             return .systemRed
-        }
-    }
-
-    var backgroundColor: Color {
-        switch self {
-        case .normal:
-            return Color(nsColor: .controlAccentColor).opacity(0.22)
-        case .warning:
-            return Color(nsColor: .systemOrange).opacity(0.28)
-        case .critical:
-            return Color(nsColor: .systemRed).opacity(0.30)
-        }
-    }
-
-    var borderColor: Color {
-        switch self {
-        case .normal:
-            return Color.white.opacity(0.1)
-        case .warning:
-            return Color(nsColor: .systemOrange)
-        case .critical:
-            return Color(nsColor: .systemRed)
         }
     }
 }

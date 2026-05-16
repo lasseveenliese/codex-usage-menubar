@@ -3,23 +3,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "CodexLimitBar",
+    name: "CodexUsageMenubar",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .executable(
-            name: "CodexLimitBar",
-            targets: ["CodexLimitBar"]
+            name: "CodexUsageMenubar",
+            targets: ["CodexUsageMenubar"]
         )
     ],
     targets: [
-        .executableTarget(
-            name: "CodexLimitBar"
-        ),
-        .testTarget(
-            name: "CodexLimitBarTests",
-            dependencies: ["CodexLimitBar"]
-        )
+        .executableTarget(name: "CodexUsageMenubar")
     ]
 )
