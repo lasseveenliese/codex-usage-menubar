@@ -1,0 +1,38 @@
+name: Release app
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: BUILD_ONLY=1 ./start.command
+
+      - name: Package app
+        run: |
+          APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
+          ZIP_PATH="$RUNNER_TEMP/CodexUsageMenubar.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
+
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest "$ZIP_PATH" --clobber
+            gh release edit latest --notes "Automated build from $GITHUB_SHA"
+          else
+            gh release create latest "$ZIP_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
+          fi
