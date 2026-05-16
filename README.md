@@ -9,15 +9,14 @@ Minimal macOS menu bar app for Codex usage.
   <img src="assets/codex-usage-healthy.png" alt="Codex Usage Menubar with healthy availability" width="49%">
 </p>
 
-## Start
+## Quickstart
 
 ```bash
 ./start.command
 ```
 
-## Download
-
-[CodexUsageMenubar.app.zip](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.app.zip)
+- Lokal starten: `./start.command`
+- Fertige App laden: [CodexUsageMenubar.app.zip](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.app.zip)
 
 The app reads the newest Codex session logs from `~/.codex` by default.
 Set `CODEX_HOME` before launching if your data lives elsewhere.
