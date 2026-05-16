@@ -96,6 +96,13 @@ enum StatusText {
 
 final class CodexRateLimitsProvider {
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
+        if let simulatedSnapshot = Self.simulationSnapshot(
+            arguments: ProcessInfo.processInfo.arguments,
+            environment: ProcessInfo.processInfo.environment
+        ) {
+            return simulatedSnapshot
+        }
+
         return try scanLatestSnapshot()
     }
 
@@ -178,6 +185,85 @@ final class CodexRateLimitsProvider {
         }
 
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
+    }
+
+    static func simulationSnapshot(
+        arguments: [String],
+        environment: [String: String]
+    ) -> CodexRateLimitsSnapshot? {
+        guard
+            let primaryDisplayPercent = launchInt(
+                flag: "--simulate-primary-used-percent",
+                environmentKey: "CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT",
+                arguments: arguments,
+                environment: environment
+            ),
+            let secondaryDisplayPercent = launchInt(
+                flag: "--simulate-secondary-used-percent",
+                environmentKey: "CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT",
+                arguments: arguments,
+                environment: environment
+            )
+        else {
+            return nil
+        }
+
+        let now = Date()
+        return CodexRateLimitsSnapshot(
+            primary: simulationWindow(
+                displayPercent: primaryDisplayPercent,
+                windowMinutes: 300,
+                resetsAt: Calendar.current.date(byAdding: .hour, value: 5, to: now)
+            ),
+            secondary: simulationWindow(
+                displayPercent: secondaryDisplayPercent,
+                windowMinutes: 10_080,
+                resetsAt: Calendar.current.date(byAdding: .day, value: 7, to: now)
+            )
+        )
+    }
+
+    private static func simulationWindow(
+        displayPercent: Int,
+        windowMinutes: Int,
+        resetsAt: Date?
+    ) -> CodexRateLimitsSnapshot.Window {
+        let clampedDisplayPercent = max(0, min(100, displayPercent))
+        return .init(
+            usedPercent: max(0, min(100, 100 - clampedDisplayPercent)),
+            windowMinutes: windowMinutes,
+            resetsAt: resetsAt
+        )
+    }
+
+    private static func launchInt(
+        flag: String,
+        environmentKey: String,
+        arguments: [String],
+        environment: [String: String]
+    ) -> Int? {
+        guard let value = launchValue(flag: flag, environmentKey: environmentKey, arguments: arguments, environment: environment) else {
+            return nil
+        }
+
+        return Int(value)
+    }
+
+    private static func launchValue(
+        flag: String,
+        environmentKey: String,
+        arguments: [String],
+        environment: [String: String]
+    ) -> String? {
+        if let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) {
+            return arguments[index + 1]
+        }
+
+        guard let value = environment[environmentKey], !value.isEmpty else {
+            return nil
+        }
+
+        return value
     }
 }
 

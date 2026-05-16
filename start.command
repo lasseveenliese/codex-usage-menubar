@@ -6,8 +6,17 @@ BUILD_ROOT="$ROOT_DIR/.build/codex-usage-menubar"
 APP_PATH="$BUILD_ROOT/Codex Usage Menubar.app"
 MACOS_DIR="$APP_PATH/Contents/MacOS"
 MODULE_CACHE="/private/tmp/codex-usage-menubar-module-cache"
+SIMULATION_ARGS=()
 
 mkdir -p "$MACOS_DIR" "$MODULE_CACHE"
+
+if [[ -n "${CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT:-}" ]]; then
+  SIMULATION_ARGS+=(--simulate-primary-used-percent "$CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT")
+fi
+
+if [[ -n "${CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT:-}" ]]; then
+  SIMULATION_ARGS+=(--simulate-secondary-used-percent "$CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT")
+fi
 
 terminate_existing_app() {
   pkill -x CodexUsageMenubar 2>/dev/null || true
@@ -58,4 +67,8 @@ fi
 
 echo "Launching Codex Usage Menubar"
 terminate_existing_app
-open -n "$APP_PATH"
+if (( ${#SIMULATION_ARGS[@]} > 0 )); then
+  open -n "$APP_PATH" --args "${SIMULATION_ARGS[@]}"
+else
+  open -n "$APP_PATH"
+fi
