@@ -6,8 +6,8 @@ struct CodexUsageMenubarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Settings {
-            EmptyView()
+        WindowGroup {
+            LaunchWindowView()
         }
     }
 }
@@ -21,6 +21,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidResignActive(_ notification: Notification) {
         statusItemController?.closePopover()
+    }
+}
+
+private struct LaunchWindowView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Codex Usage Menubar added")
+                .font(.headline)
+
+            Text("The menu bar item is now running. You can close this window and use the icon at the top of the screen.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+
+                Button("Close Window") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
     }
 }
 
