@@ -5,8 +5,8 @@ Minimal macOS menu bar app for Codex usage.
 ## Screenshots
 
 <p>
-  <img src="assets/codex-usage-warning-critical.png" alt="Codex Usage Menubar with low and critical availability" width="49%">
   <img src="assets/codex-usage-healthy.png" alt="Codex Usage Menubar with healthy availability" width="49%">
+  <img src="assets/codex-usage-warning-critical.png" alt="Codex Usage Menubar with low and critical availability" width="49%">
 </p>
 
 ## Quickstart
