@@ -117,7 +117,7 @@ final class StatusItemController {
             string: " | ",
             attributes: [
                 .font: font,
-                .foregroundColor: NSColor.black
+                .foregroundColor: NSColor.labelColor
             ]
         ))
 

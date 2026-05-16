@@ -113,7 +113,7 @@ enum MenuBarTone {
     var nsColor: NSColor {
         switch self {
         case .normal:
-            return .black
+            return .labelColor
         case .warning:
             return .systemOrange
         case .critical:
