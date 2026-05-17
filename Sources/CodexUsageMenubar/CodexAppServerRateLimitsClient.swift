@@ -2,6 +2,7 @@ import Foundation
 
 final class CodexAppServerRateLimitsClient {
     enum ClientError: Error {
+        case missingCodexExecutable
         case missingSocket
         case noRateLimitsResponse
         case invalidResponse
@@ -66,11 +67,8 @@ final class CodexAppServerRateLimitsClient {
 
     private func runAppServer() throws -> Data {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = [
-            "-lc",
-            "codex app-server --listen stdio://"
-        ]
+        process.executableURL = try codexExecutableURL()
+        process.arguments = ["app-server", "--listen", "stdio://"]
 
         return try runJSONRPC(process: process)
     }
@@ -92,13 +90,37 @@ final class CodexAppServerRateLimitsClient {
 
     private func runProxy(socketPath: String) throws -> Data {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = [
-            "-lc",
-            "codex app-server proxy --sock \(Self.shellQuote(socketPath))"
-        ]
+        process.executableURL = try codexExecutableURL()
+        process.arguments = ["app-server", "proxy", "--sock", socketPath]
 
         return try runJSONRPC(process: process)
+    }
+
+    private func codexExecutableURL() throws -> URL {
+        let fileManager = FileManager.default
+        var candidateDirectories: [String] = []
+
+        if let path = ProcessInfo.processInfo.environment["PATH"], !path.isEmpty {
+            candidateDirectories.append(contentsOf: path.split(separator: ":").map(String.init))
+        }
+
+        candidateDirectories.append(contentsOf: [
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".npm-global/bin").path,
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path,
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("bin").path,
+            "/opt/homebrew/bin",
+            "/usr/local/bin"
+        ])
+
+        var seen = Set<String>()
+        for directory in candidateDirectories where seen.insert(directory).inserted {
+            let candidate = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("codex")
+            if fileManager.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        throw ClientError.missingCodexExecutable
     }
 
     private func runJSONRPC(process: Process) throws -> Data {
@@ -204,10 +226,6 @@ final class CodexAppServerRateLimitsClient {
         }
 
         return nil
-    }
-
-    private static func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 
     private static var appVersion: String {
