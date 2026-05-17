@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - feature/show-codex-credits
 
 permissions:
   contents: read
@@ -48,20 +47,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish branch release
-        if: github.event_name == 'push' && github.ref_name == 'feature/show-codex-credits'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DMG_PATH: ${{ steps.package.outputs.dmg_path }}
-          BRANCH_RELEASE_TAG: feature-show-codex-credits-latest
-        run: |
-          if gh release view "$BRANCH_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$BRANCH_RELEASE_TAG" "$DMG_PATH" --clobber
-            gh release edit "$BRANCH_RELEASE_TAG" --notes "Automated branch build from $GITHUB_SHA"
-          else
-            gh release create "$BRANCH_RELEASE_TAG" "$DMG_PATH" --title "feature/show-codex-credits latest build" --notes "Automated branch build from $GITHUB_SHA" --target "$GITHUB_SHA"
-          fi
-
       - name: Comment PR download link on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -69,7 +54,7 @@ jobs:
           script: |
             const marker = '<!-- codex-usage-menubar-artifact -->';
             const body = `${marker}
-            Latest PR download: [CodexUsageMenubar.dmg](${process.env.RELEASE_URL})
+            Latest app artifact: [CodexUsageMenubar.dmg](${process.env.ARTIFACT_URL})
 
             Run: ${process.env.RUN_URL}
             `;
@@ -100,5 +85,5 @@ jobs:
               });
             }
         env:
-          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/feature-show-codex-credits-latest/CodexUsageMenubar.dmg
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
