@@ -123,6 +123,10 @@ final class CodexStatusModel: ObservableObject {
         StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
     }
 
+    var appVersionText: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.1"
+    }
+
     var primaryMenuBarTone: MenuBarTone {
         MenuBarTone.from(availablePercent: primaryAvailablePercent ?? 100)
     }

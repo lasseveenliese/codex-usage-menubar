@@ -165,9 +165,15 @@ private struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(model.statusText)
-                .font(.headline)
-                .monospacedDigit()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.statusText)
+                    .font(.headline)
+                    .monospacedDigit()
+
+                Text("Version \(model.appVersionText)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Availability")

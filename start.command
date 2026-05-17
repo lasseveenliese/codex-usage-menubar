@@ -10,6 +10,18 @@ MODULE_CACHE="/private/tmp/codex-usage-menubar-module-cache"
 ICON_SOURCE="$ROOT_DIR/assets/app-icon-source.png"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
 SIMULATION_ARGS=()
+VERSION_FILE="$ROOT_DIR/VERSION"
+
+if [[ -f "$VERSION_FILE" ]]; then
+  APP_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+else
+  APP_VERSION="1.0.1"
+fi
+
+APP_BUILD_VERSION="${APP_VERSION//./}"
+if [[ -z "$APP_BUILD_VERSION" ]]; then
+  APP_BUILD_VERSION="1"
+fi
 
 rm -rf "$BUILD_ROOT"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE"
@@ -136,7 +148,7 @@ sign_app_bundle() {
   APP_PATH="$signed_app_path"
 }
 
-cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
+cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -152,9 +164,9 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$APP_BUILD_VERSION</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
