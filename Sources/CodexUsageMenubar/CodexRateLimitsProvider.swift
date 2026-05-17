@@ -1,6 +1,12 @@
 import Foundation
 
 struct CodexRateLimitsSnapshot: Equatable {
+    struct Credits: Equatable {
+        let balance: String?
+        let hasCredits: Bool
+        let unlimited: Bool
+    }
+
     struct Window: Equatable {
         let usedPercent: Int
         let windowMinutes: Int?
@@ -9,6 +15,13 @@ struct CodexRateLimitsSnapshot: Equatable {
 
     let primary: Window
     let secondary: Window
+    let credits: Credits?
+
+    init(primary: Window, secondary: Window, credits: Credits? = nil) {
+        self.primary = primary
+        self.secondary = secondary
+        self.credits = credits
+    }
 }
 
 enum StatusText {
@@ -38,6 +51,20 @@ enum StatusText {
         }
 
         return "Updated \(dateTimeString(for: lastUpdatedAt, timeZone: timeZone))"
+    }
+
+    static func formattedCreditsBalance(_ balance: String) -> String {
+        guard let value = Decimal(string: balance, locale: Locale(identifier: "en_US_POSIX")) else {
+            return balance
+        }
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = .autoupdatingCurrent
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+
+        return formatter.string(from: value as NSDecimalNumber) ?? balance
     }
 
     static func shortClockString(for date: Date, timeZone: TimeZone = .current) -> String {
@@ -178,7 +205,10 @@ final class CodexRateLimitsProvider {
                     usedPercent: Int(secondary.usedPercent.rounded()),
                     windowMinutes: secondary.windowMinutes,
                     resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-                )
+                ),
+                credits: entry.payload?.rateLimits?.credits.map {
+                    .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
+                }
             )
         }
 
@@ -296,6 +326,7 @@ struct CodexLogEntry: Decodable {
 struct RateLimits: Decodable {
     let primary: Window?
     let secondary: Window?
+    let credits: Credits?
 
     struct Window: Decodable {
         let usedPercent: Double
@@ -307,5 +338,11 @@ struct RateLimits: Decodable {
             case windowMinutes = "window_minutes"
             case resetsAt = "resets_at"
         }
+    }
+
+    struct Credits: Decodable {
+        let balance: String?
+        let hasCredits: Bool
+        let unlimited: Bool
     }
 }

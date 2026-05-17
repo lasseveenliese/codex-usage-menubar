@@ -103,6 +103,22 @@ final class CodexStatusModel: ObservableObject {
         return StatusText.resetCountdownText(for: snapshot.secondary)
     }
 
+    var creditsText: String {
+        guard let credits = snapshot?.credits else {
+            return "--"
+        }
+
+        if credits.unlimited {
+            return "unlimited"
+        }
+
+        if let balance = credits.balance, !balance.isEmpty {
+            return StatusText.formattedCreditsBalance(balance)
+        }
+
+        return credits.hasCredits ? "available" : "0"
+    }
+
     var lastUpdatedText: String {
         StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
     }

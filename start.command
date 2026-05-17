@@ -11,7 +11,7 @@ ICON_SOURCE="$ROOT_DIR/assets/app-icon-source.png"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
 SIMULATION_ARGS=()
 
-rm -rf "$APP_PATH"
+rm -rf "$BUILD_ROOT"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE"
 
 PRIMARY_SIMULATION="${CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT:-${CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT:-}}"
@@ -119,9 +119,9 @@ SWIFT
 }
 
 sign_app_bundle() {
-  xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.provenance "$APP_PATH" 2>/dev/null || true
+  xattr -dr com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
+  xattr -dr com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
+  xattr -dr com.apple.provenance "$APP_PATH" 2>/dev/null || true
   codesign --force --deep --sign - "$APP_PATH" >/dev/null
   xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
   xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true

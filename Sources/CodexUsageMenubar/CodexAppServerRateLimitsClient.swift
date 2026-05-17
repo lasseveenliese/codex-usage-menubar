@@ -8,16 +8,53 @@ final class CodexAppServerRateLimitsClient {
     }
 
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
-        let socketURL = try controlSocketURL()
-        guard FileManager.default.fileExists(atPath: socketURL.path) else {
-            throw ClientError.missingSocket
+        if let directSnapshot = try? fetchSnapshot(from: .direct) {
+            return directSnapshot
         }
 
-        let output = try runProxy(socketPath: socketURL.path)
+        if let socketSnapshot = try? fetchSnapshot(from: .socket(try controlSocketURL())) {
+            return socketSnapshot
+        }
+
+        throw ClientError.invalidResponse
+    }
+
+    private enum Source {
+        case direct
+        case socket(URL)
+    }
+
+    private func fetchSnapshot(from source: Source) throws -> CodexRateLimitsSnapshot {
+        let output: Data
+
+        switch source {
+        case .direct:
+            output = try runAppServer()
+        case .socket(let socketURL):
+            guard FileManager.default.fileExists(atPath: socketURL.path) else {
+                throw ClientError.missingSocket
+            }
+            output = try runProxy(socketPath: socketURL.path)
+        }
+
         let response = try parseRateLimitsResponse(from: output)
 
-        if let codexSnapshot = response.rateLimitsByLimitId?["codex"].flatMap(CodexRateLimitsSnapshot.init) {
-            return codexSnapshot
+        if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
+            return CodexRateLimitsSnapshot(
+                primary: .init(
+                    usedPercent: codexSnapshot.primary?.usedPercent ?? response.rateLimits.primary?.usedPercent ?? 0,
+                    windowMinutes: codexSnapshot.primary?.windowDurationMins ?? response.rateLimits.primary?.windowDurationMins,
+                    resetsAt: codexSnapshot.primary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.primary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                ),
+                secondary: .init(
+                    usedPercent: codexSnapshot.secondary?.usedPercent ?? response.rateLimits.secondary?.usedPercent ?? 0,
+                    windowMinutes: codexSnapshot.secondary?.windowDurationMins ?? response.rateLimits.secondary?.windowDurationMins,
+                    resetsAt: codexSnapshot.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                ),
+                credits: (codexSnapshot.credits ?? response.rateLimits.credits).map {
+                    .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
+                }
+            )
         }
 
         if let legacySnapshot = CodexRateLimitsSnapshot(response.rateLimits) {
@@ -25,6 +62,17 @@ final class CodexAppServerRateLimitsClient {
         }
 
         throw ClientError.noRateLimitsResponse
+    }
+
+    private func runAppServer() throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [
+            "-lc",
+            "codex app-server --listen stdio://"
+        ]
+
+        return try runJSONRPC(process: process)
     }
 
     private func controlSocketURL() throws -> URL {
@@ -49,6 +97,11 @@ final class CodexAppServerRateLimitsClient {
             "-lc",
             "codex app-server proxy --sock \(Self.shellQuote(socketPath))"
         ]
+
+        return try runJSONRPC(process: process)
+    }
+
+    private func runJSONRPC(process: Process) throws -> Data {
 
         let inputPipe = Pipe()
         let outputPipe = Pipe()
@@ -83,12 +136,15 @@ final class CodexAppServerRateLimitsClient {
         ]
 
         let inputHandle = inputPipe.fileHandleForWriting
+        defer {
+            inputHandle.closeFile()
+        }
+
         for line in requestLines {
             guard let data = line.data(using: .utf8) else { continue }
             inputHandle.write(data)
             inputHandle.write(Data([0x0A]))
         }
-        inputHandle.closeFile()
 
         let deadline = Date().addingTimeInterval(3)
         while process.isRunning && Date() < deadline {
@@ -172,6 +228,13 @@ private struct AppServerRateLimitsResponse: Decodable {
 private struct AppServerRateLimitSnapshot: Decodable {
     let primary: AppServerRateLimitWindow?
     let secondary: AppServerRateLimitWindow?
+    let credits: AppServerCreditsSnapshot?
+}
+
+private struct AppServerCreditsSnapshot: Decodable {
+    let balance: String?
+    let hasCredits: Bool
+    let unlimited: Bool
 }
 
 private struct AppServerRateLimitWindow: Decodable {
@@ -196,7 +259,10 @@ extension CodexRateLimitsSnapshot {
                 usedPercent: secondary.usedPercent,
                 windowMinutes: secondary.windowDurationMins,
                 resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-            )
+            ),
+            credits: snapshot.credits.map {
+                .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
+            }
         )
     }
 }
