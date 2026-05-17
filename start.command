@@ -119,13 +119,21 @@ SWIFT
 }
 
 sign_app_bundle() {
-  xattr -dr com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
-  xattr -dr com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
-  xattr -dr com.apple.provenance "$APP_PATH" 2>/dev/null || true
-  codesign --force --deep --sign - "$APP_PATH" >/dev/null
-  xattr -d com.apple.FinderInfo "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.fileprovider.fpfs#P "$APP_PATH" 2>/dev/null || true
-  xattr -d com.apple.provenance "$APP_PATH" 2>/dev/null || true
+  local signing_root="/private/tmp/codex-usage-menubar-signing"
+  local signed_app_path="$signing_root/Codex Usage Menubar.app"
+
+  rm -rf "$signing_root"
+  mkdir -p "$signing_root"
+
+  ditto --norsrc --noextattr "$APP_PATH" "$signed_app_path"
+  xattr -rc "$signed_app_path" 2>/dev/null || true
+  xattr -dr com.apple.FinderInfo "$signed_app_path" 2>/dev/null || true
+  xattr -dr com.apple.fileprovider.fpfs#P "$signed_app_path" 2>/dev/null || true
+  xattr -dr com.apple.provenance "$signed_app_path" 2>/dev/null || true
+
+  codesign --force --deep --sign - "$signed_app_path" >/dev/null
+
+  APP_PATH="$signed_app_path"
 }
 
 cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'

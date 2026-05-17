@@ -23,12 +23,12 @@ jobs:
         run: BUILD_ONLY=1 ./start.command
 
       - name: Verify bundle
-        run: codesign --verify --deep --strict --verbose=4 ".build/codex-usage-menubar/Codex Usage Menubar.app"
+        run: codesign --verify --deep --strict --verbose=4 "/private/tmp/codex-usage-menubar-signing/Codex Usage Menubar.app"
 
       - name: Package app
         id: package
         run: |
-          APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
+          APP_PATH="/private/tmp/codex-usage-menubar-signing/Codex Usage Menubar.app"
           STAGING_DIR="$RUNNER_TEMP/CodexUsageMenubar-dmg"
           DMG_PATH="$RUNNER_TEMP/CodexUsageMenubar.dmg"
           rm -rf "$STAGING_DIR"
