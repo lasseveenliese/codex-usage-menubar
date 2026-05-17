@@ -21,7 +21,7 @@ jobs:
 
       - name: Package app
         run: |
-          APP_PATH=".build/codex-usage-menubar/Codex Usage Menubar.app"
+          APP_PATH="/private/tmp/codex-usage-menubar-signing/Codex Usage Menubar.app"
           STAGING_DIR="$RUNNER_TEMP/CodexUsageMenubar-dmg"
           DMG_PATH="$RUNNER_TEMP/CodexUsageMenubar.dmg"
           rm -rf "$STAGING_DIR"

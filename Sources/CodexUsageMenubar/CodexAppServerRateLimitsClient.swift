@@ -67,8 +67,9 @@ final class CodexAppServerRateLimitsClient {
 
     private func runAppServer() throws -> Data {
         let process = Process()
-        process.executableURL = try codexExecutableURL()
-        process.arguments = ["app-server", "--listen", "stdio://"]
+        let invocation = try codexInvocation()
+        process.executableURL = invocation.executableURL
+        process.arguments = invocation.arguments + ["app-server", "--listen", "stdio://"]
 
         return try runJSONRPC(process: process)
     }
@@ -90,13 +91,19 @@ final class CodexAppServerRateLimitsClient {
 
     private func runProxy(socketPath: String) throws -> Data {
         let process = Process()
-        process.executableURL = try codexExecutableURL()
-        process.arguments = ["app-server", "proxy", "--sock", socketPath]
+        let invocation = try codexInvocation()
+        process.executableURL = invocation.executableURL
+        process.arguments = invocation.arguments + ["app-server", "proxy", "--sock", socketPath]
 
         return try runJSONRPC(process: process)
     }
 
-    private func codexExecutableURL() throws -> URL {
+    private struct Invocation {
+        let executableURL: URL
+        let arguments: [String]
+    }
+
+    private func codexInvocation() throws -> Invocation {
         let fileManager = FileManager.default
         var candidateDirectories: [String] = []
 
@@ -116,11 +123,54 @@ final class CodexAppServerRateLimitsClient {
         for directory in candidateDirectories where seen.insert(directory).inserted {
             let candidate = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("codex")
             if fileManager.isExecutableFile(atPath: candidate.path) {
-                return candidate
+                if let invocation = nodeInvocation(for: candidate) {
+                    return invocation
+                }
+
+                return Invocation(executableURL: candidate, arguments: [])
             }
         }
 
         throw ClientError.missingCodexExecutable
+    }
+
+    private func nodeInvocation(for codexURL: URL) -> Invocation? {
+        let resolvedCodexURL = codexURL.resolvingSymlinksInPath()
+        guard ["js", "mjs", "cjs"].contains(resolvedCodexURL.pathExtension.lowercased()) else {
+            return nil
+        }
+
+        guard let nodeURL = nodeExecutableURL() else {
+            return nil
+        }
+
+        return Invocation(executableURL: nodeURL, arguments: [resolvedCodexURL.path])
+    }
+
+    private func nodeExecutableURL() -> URL? {
+        let fileManager = FileManager.default
+        var candidateDirectories: [String] = []
+
+        if let path = ProcessInfo.processInfo.environment["PATH"], !path.isEmpty {
+            candidateDirectories.append(contentsOf: path.split(separator: ":").map(String.init))
+        }
+
+        candidateDirectories.append(contentsOf: [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin"
+        ])
+
+        var seen = Set<String>()
+        for directory in candidateDirectories where seen.insert(directory).inserted {
+            let candidate = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("node")
+            if fileManager.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 
     private func runJSONRPC(process: Process) throws -> Data {
@@ -193,6 +243,8 @@ final class CodexAppServerRateLimitsClient {
 
     private func parseRateLimitsResponse(from output: Data) throws -> AppServerRateLimitsResponse {
         let text = String(decoding: output, as: UTF8.self)
+        var rateLimitsResponse: AppServerRateLimitsResponse?
+        var updatedRateLimits: AppServerRateLimitSnapshot?
 
         for line in text.split(whereSeparator: \.isNewline) {
             guard let data = String(line).data(using: .utf8) else { continue }
@@ -203,13 +255,96 @@ final class CodexAppServerRateLimitsClient {
                 continue
             }
 
+            if let notificationSnapshot = Self.updatedRateLimitsSnapshot(from: dictionary) {
+                updatedRateLimits = notificationSnapshot
+            }
+
             guard Self.messageId(dictionary) == 2 else { continue }
             guard let resultObject = dictionary["result"] else { continue }
             let resultData = try JSONSerialization.data(withJSONObject: resultObject)
-            return try JSONDecoder().decode(AppServerRateLimitsResponse.self, from: resultData)
+            rateLimitsResponse = try JSONDecoder().decode(AppServerRateLimitsResponse.self, from: resultData)
+        }
+
+        if let response = rateLimitsResponse {
+            return Self.merge(response: response, updatedRateLimits: updatedRateLimits)
+        }
+
+        if let updatedRateLimits {
+            return AppServerRateLimitsResponse(rateLimits: updatedRateLimits, rateLimitsByLimitId: nil)
         }
 
         throw ClientError.invalidResponse
+    }
+
+    private static func merge(
+        response: AppServerRateLimitsResponse,
+        updatedRateLimits: AppServerRateLimitSnapshot?
+    ) -> AppServerRateLimitsResponse {
+        guard let updatedRateLimits else {
+            return response
+        }
+
+        let creditsFallback = updatedRateLimits.credits
+
+        if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
+            let mergedCodexSnapshot = AppServerRateLimitSnapshot(
+                primary: codexSnapshot.primary ?? response.rateLimits.primary,
+                secondary: codexSnapshot.secondary ?? response.rateLimits.secondary,
+                credits: codexSnapshot.credits ?? response.rateLimits.credits ?? creditsFallback
+            )
+
+            var rateLimitsByLimitId = response.rateLimitsByLimitId ?? [:]
+            rateLimitsByLimitId["codex"] = mergedCodexSnapshot
+            return AppServerRateLimitsResponse(rateLimits: response.rateLimits, rateLimitsByLimitId: rateLimitsByLimitId)
+        }
+
+        let mergedRateLimits = AppServerRateLimitSnapshot(
+            primary: response.rateLimits.primary,
+            secondary: response.rateLimits.secondary,
+            credits: response.rateLimits.credits ?? creditsFallback
+        )
+
+        return AppServerRateLimitsResponse(rateLimits: mergedRateLimits, rateLimitsByLimitId: response.rateLimitsByLimitId)
+    }
+
+    private static func updatedRateLimitsSnapshot(from dictionary: [String: Any]) -> AppServerRateLimitSnapshot? {
+        guard Self.methodName(dictionary) == "account/rateLimits/updated" else {
+            return nil
+        }
+
+        if let params = dictionary["params"] as? [String: Any] {
+            return Self.decodeRateLimitsSnapshot(from: params)
+        }
+
+        return Self.decodeRateLimitsSnapshot(from: dictionary)
+    }
+
+    private static func decodeRateLimitsSnapshot(from dictionary: [String: Any]) -> AppServerRateLimitSnapshot? {
+        guard let rateLimits = dictionary["rateLimits"] else {
+            return nil
+        }
+
+        guard JSONSerialization.isValidJSONObject(rateLimits) else {
+            return nil
+        }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: rateLimits) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(AppServerRateLimitSnapshot.self, from: data)
+    }
+
+    private static func methodName(_ dictionary: [String: Any]) -> String? {
+        if let method = dictionary["method"] as? String {
+            return method
+        }
+
+        if let params = dictionary["params"] as? [String: Any], let method = params["method"] as? String {
+            return method
+        }
+
+        return nil
     }
 
     private static func messageId(_ dictionary: [String: Any]) -> Int? {
