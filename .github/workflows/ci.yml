@@ -47,14 +47,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Comment artifact link on PR
+      - name: Publish PR release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DMG_PATH: ${{ steps.package.outputs.dmg_path }}
+          PR_RELEASE_TAG: pr-${{ github.event.pull_request.number }}-latest
+        run: |
+          if gh release view "$PR_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$PR_RELEASE_TAG" "$DMG_PATH" --clobber
+            gh release edit "$PR_RELEASE_TAG" --notes "Automated PR build from $GITHUB_SHA"
+          else
+            gh release create "$PR_RELEASE_TAG" "$DMG_PATH" --title "PR #${{ github.event.pull_request.number }} latest build" --notes "Automated PR build from $GITHUB_SHA" --target "$GITHUB_SHA"
+          fi
+
+      - name: Comment PR download link on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
             const marker = '<!-- codex-usage-menubar-artifact -->';
             const body = `${marker}
-            Latest app artifact: [CodexUsageMenubar.dmg](${process.env.ARTIFACT_URL})
+            Latest PR download: [CodexUsageMenubar.dmg](${process.env.RELEASE_URL})
 
             Run: ${process.env.RUN_URL}
             `;
@@ -85,5 +99,5 @@ jobs:
               });
             }
         env:
-          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/pr-${{ github.event.pull_request.number }}-latest/CodexUsageMenubar.dmg
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
