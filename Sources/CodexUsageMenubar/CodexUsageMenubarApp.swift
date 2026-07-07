@@ -269,7 +269,7 @@ private enum MenuBarImageRenderer {
                 column.title,
                 in: NSRect(x: x + 2, y: 7, width: 20, height: 9),
                 font: MenuBarStyle.smallFont,
-                color: column.tone.nsColor
+                color: MenuBarStyle.hardTextColor
             )
         }
 
