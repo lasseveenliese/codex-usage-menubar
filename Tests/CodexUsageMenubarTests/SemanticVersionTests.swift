@@ -30,6 +30,8 @@ final class SemanticVersionTests: XCTestCase {
 
         XCTAssertEqual(update.version, "1.2.0")
         XCTAssertEqual(update.downloadUrl.absoluteString, "https://example.com/CodexUsageMenubar.dmg")
+        XCTAssertEqual(update.zipUrl?.absoluteString, "https://example.com/CodexUsageMenubar.app.zip")
+        XCTAssertEqual(update.sha256, "abc123")
     }
 
     func testUpdateCheckerReturnsCurrentForSameVersion() async throws {
@@ -59,6 +61,8 @@ final class SemanticVersionTests: XCTestCase {
         {
           "version": "\(version)",
           "downloadUrl": "https://example.com/CodexUsageMenubar.dmg",
+          "zipUrl": "https://example.com/CodexUsageMenubar.app.zip",
+          "sha256": "abc123",
           "releaseUrl": "https://example.com/releases/latest",
           "minimumMacOS": "14.0"
         }

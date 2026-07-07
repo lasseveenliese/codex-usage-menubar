@@ -27,6 +27,7 @@ final class CodexStatusModel: ObservableObject {
     var onChange: (() -> Void)?
 
     private let updateChecker = UpdateChecker()
+    private let updateInstaller = UpdateInstaller()
     private var refreshLoopTask: Task<Void, Never>?
 
     init() {
@@ -74,6 +75,10 @@ final class CodexStatusModel: ObservableObject {
             return
         }
 
+        if case .installing = updateState {
+            return
+        }
+
         if !force, !shouldCheckForUpdates {
             return
         }
@@ -108,6 +113,22 @@ final class CodexStatusModel: ObservableObject {
     func openAvailableUpdateDownload() {
         guard case .available(let update) = updateState else { return }
         NSWorkspace.shared.open(update.downloadUrl)
+    }
+
+    func installAvailableUpdate() async {
+        guard case .available(let update) = updateState else { return }
+        guard update.canInstallInApp else {
+            NSWorkspace.shared.open(update.downloadUrl)
+            return
+        }
+
+        updateState = .installing(update)
+        do {
+            try await updateInstaller.install(update: update)
+            NSApplication.shared.terminate(nil)
+        } catch {
+            updateState = .available(update)
+        }
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) async {
@@ -185,7 +206,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.0"
     }
 
     var updateStatusText: String? {
@@ -196,6 +217,8 @@ final class CodexStatusModel: ObservableObject {
             return "Up to date"
         case .available(let update):
             return "Update \(update.version) available"
+        case .installing:
+            return "Installing update..."
         case .idle, .current(showStatus: false), .failed:
             return nil
         }
@@ -269,6 +292,7 @@ enum UpdateState: Equatable {
     case idle
     case checking
     case available(AvailableUpdate)
+    case installing(AvailableUpdate)
     case current(showStatus: Bool)
     case failed
 }

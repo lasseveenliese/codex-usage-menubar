@@ -3,6 +3,8 @@ import Foundation
 struct UpdateManifest: Decodable {
     let version: String
     let downloadUrl: URL
+    let zipUrl: URL?
+    let sha256: String?
     let releaseUrl: URL
     let minimumMacOS: String
 }
@@ -10,8 +12,14 @@ struct UpdateManifest: Decodable {
 struct AvailableUpdate: Equatable {
     let version: String
     let downloadUrl: URL
+    let zipUrl: URL?
+    let sha256: String?
     let releaseUrl: URL
     let minimumMacOS: String
+
+    var canInstallInApp: Bool {
+        zipUrl != nil && sha256?.isEmpty == false
+    }
 }
 
 enum UpdateCheckResult: Equatable {
@@ -61,6 +69,8 @@ struct UpdateChecker {
         return .available(AvailableUpdate(
             version: manifest.version,
             downloadUrl: manifest.downloadUrl,
+            zipUrl: manifest.zipUrl,
+            sha256: manifest.sha256,
             releaseUrl: manifest.releaseUrl,
             minimumMacOS: manifest.minimumMacOS
         ))

@@ -427,7 +427,7 @@ private struct MenuContent: View {
                     } label: {
                         Text("Check for Updates")
                     }
-                    .disabled(model.updateState == .checking)
+                    .disabled(model.updateState.isBusy)
                 }
 
                 Button("Quit") {
@@ -458,9 +458,17 @@ private struct UpdateStatusView: View {
                 .foregroundStyle(.secondary)
 
             if case .available = model.updateState {
-                HStack(spacing: 10) {
-                    Button("Download") {
-                        model.openAvailableUpdateDownload()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Button("Install Update") {
+                            Task {
+                                await model.installAvailableUpdate()
+                            }
+                        }
+
+                        Button("Download") {
+                            model.openAvailableUpdateDownload()
+                        }
                     }
 
                     Button("Later") {
@@ -473,6 +481,17 @@ private struct UpdateStatusView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private extension UpdateState {
+    var isBusy: Bool {
+        switch self {
+        case .checking, .installing:
+            return true
+        case .idle, .available, .current, .failed:
+            return false
+        }
     }
 }
 
