@@ -24,6 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private enum MenuBarStyle {
+    static let smallFont = NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold)
+    static let mediumFont = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold)
+    static let largeFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    static let hardTextColor = NSColor.labelColor
+    static let softTextColor = NSColor.labelColor.withAlphaComponent(0.48)
+}
+
 private struct LaunchWindowView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -161,13 +169,12 @@ final class StatusItemController {
     }
 
     private func statusItemTitle() -> NSAttributedString {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         let result = NSMutableAttributedString()
 
         result.append(NSAttributedString(
             string: model.primaryStatusText,
             attributes: [
-                .font: font,
+                .font: MenuBarStyle.largeFont,
                 .foregroundColor: model.primaryMenuBarTone.nsColor
             ]
         ))
@@ -175,15 +182,15 @@ final class StatusItemController {
         result.append(NSAttributedString(
             string: " | ",
             attributes: [
-                .font: font,
-                .foregroundColor: NSColor.labelColor
+                .font: MenuBarStyle.largeFont,
+                .foregroundColor: MenuBarStyle.hardTextColor
             ]
         ))
 
         result.append(NSAttributedString(
             string: model.secondaryStatusText,
             attributes: [
-                .font: font,
+                .font: MenuBarStyle.largeFont,
                 .foregroundColor: model.secondaryMenuBarTone.nsColor
             ]
         ))
@@ -217,13 +224,13 @@ private enum MenuBarImageRenderer {
             drawCentered(
                 column.title,
                 in: NSRect(x: x, y: 12, width: 30, height: 9),
-                font: .monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold),
-                color: .secondaryLabelColor
+                font: MenuBarStyle.smallFont,
+                color: MenuBarStyle.softTextColor
             )
             drawCentered(
                 percentText(column.percent),
                 in: NSRect(x: x, y: 0, width: 30, height: 13),
-                font: .monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold),
+                font: MenuBarStyle.mediumFont,
                 color: column.tone.nsColor
             )
         }
@@ -259,7 +266,7 @@ private enum MenuBarImageRenderer {
             drawCentered(
                 column.title,
                 in: NSRect(x: x + 2, y: 7, width: 20, height: 9),
-                font: .monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold),
+                font: MenuBarStyle.smallFont,
                 color: column.tone.nsColor
             )
         }
@@ -274,18 +281,6 @@ private enum MenuBarImageRenderer {
         radius: CGFloat
     ) {
         let progress = CGFloat(clampedPercent(percent) ?? 0) / 100
-        let rect = NSRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2,
-            height: radius * 2
-        )
-
-        let backgroundPath = NSBezierPath(ovalIn: rect)
-        backgroundPath.lineWidth = 1.8
-        NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
-        backgroundPath.stroke()
-
         guard progress > 0 else { return }
 
         let foregroundPath = NSBezierPath()

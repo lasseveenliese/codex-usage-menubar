@@ -15,7 +15,7 @@ VERSION_FILE="$ROOT_DIR/VERSION"
 if [[ -f "$VERSION_FILE" ]]; then
   APP_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 else
-  APP_VERSION="1.1.2"
+  APP_VERSION="1.1.3"
 fi
 
 APP_BUILD_VERSION="${APP_VERSION//./}"
