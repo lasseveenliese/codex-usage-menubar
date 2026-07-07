@@ -87,9 +87,9 @@ final class CodexStatusModel: ObservableObject {
 
             switch result {
             case .current:
-                updateState = .current
+                updateState = .current(showStatus: force)
             case .available(let update):
-                updateState = isDismissed(update) ? .current : .available(update)
+                updateState = isDismissed(update) ? .current(showStatus: false) : .available(update)
             }
         } catch {
             let checkedAt = Date()
@@ -102,7 +102,7 @@ final class CodexStatusModel: ObservableObject {
     func dismissAvailableUpdate() {
         guard case .available(let update) = updateState else { return }
         UserDefaults.standard.set(update.version, forKey: Self.dismissedUpdateVersionPreferenceKey)
-        updateState = .current
+        updateState = .current(showStatus: false)
     }
 
     func openAvailableUpdateDownload() {
@@ -185,16 +185,18 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2.1"
     }
 
     var updateStatusText: String? {
         switch updateState {
         case .checking:
             return "Checking for updates..."
+        case .current(showStatus: true):
+            return "Up to date"
         case .available(let update):
             return "Update \(update.version) available"
-        case .idle, .current, .failed:
+        case .idle, .current(showStatus: false), .failed:
             return nil
         }
     }
@@ -267,7 +269,7 @@ enum UpdateState: Equatable {
     case idle
     case checking
     case available(AvailableUpdate)
-    case current
+    case current(showStatus: Bool)
     case failed
 }
 
