@@ -254,11 +254,11 @@ private enum MenuBarImageRenderer {
                 percent: column.percent,
                 tone: column.tone,
                 center: NSPoint(x: x + 12, y: 11),
-                radius: 7.5
+                radius: 8.5
             )
             drawCentered(
                 column.title,
-                in: NSRect(x: x + 2, y: 7.5, width: 20, height: 9),
+                in: NSRect(x: x + 2, y: 7, width: 20, height: 9),
                 font: .monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold),
                 color: column.tone.nsColor
             )
@@ -282,7 +282,7 @@ private enum MenuBarImageRenderer {
         )
 
         let backgroundPath = NSBezierPath(ovalIn: rect)
-        backgroundPath.lineWidth = 2.5
+        backgroundPath.lineWidth = 1.8
         NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
         backgroundPath.stroke()
 
@@ -296,7 +296,7 @@ private enum MenuBarImageRenderer {
             endAngle: 90 - (360 * progress),
             clockwise: true
         )
-        foregroundPath.lineWidth = 2.8
+        foregroundPath.lineWidth = 2.0
         foregroundPath.lineCapStyle = .round
         tone.nsColor.setStroke()
         foregroundPath.stroke()
