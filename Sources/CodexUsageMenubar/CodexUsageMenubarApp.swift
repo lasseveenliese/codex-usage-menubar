@@ -63,7 +63,7 @@ final class StatusItemController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 270, height: 320)
+        popover.contentSize = NSSize(width: 270, height: 360)
         popover.contentViewController = NSHostingController(rootView: MenuContent(model: model))
 
         if let button = statusItem.button {
@@ -111,7 +111,39 @@ final class StatusItemController {
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
-        button.attributedTitle = statusItemTitle()
+
+        button.image = nil
+        button.imagePosition = .noImage
+        statusItem.length = NSStatusItem.variableLength
+
+        switch model.menuBarDisplayMode {
+        case .classic:
+            button.attributedTitle = statusItemTitle()
+        case .stacked:
+            let image = MenuBarImageRenderer.stacked(
+                primaryPercent: model.primaryAvailablePercent,
+                secondaryPercent: model.secondaryAvailablePercent,
+                primaryTone: model.primaryMenuBarTone,
+                secondaryTone: model.secondaryMenuBarTone
+            )
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = image
+            button.imagePosition = .imageOnly
+            statusItem.length = image.size.width
+        case .rings:
+            let image = MenuBarImageRenderer.rings(
+                primaryPercent: model.primaryAvailablePercent,
+                secondaryPercent: model.secondaryAvailablePercent,
+                primaryTone: model.primaryMenuBarTone,
+                secondaryTone: model.secondaryMenuBarTone
+            )
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = image
+            button.imagePosition = .imageOnly
+            statusItem.length = image.size.width
+        }
+
+        button.toolTip = "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
     }
 
     private func closePopoverIfNeeded(for event: NSEvent) {
@@ -160,6 +192,151 @@ final class StatusItemController {
     }
 }
 
+private enum MenuBarImageRenderer {
+    private static let height: CGFloat = 22
+
+    static func stacked(
+        primaryPercent: Int?,
+        secondaryPercent: Int?,
+        primaryTone: MenuBarTone,
+        secondaryTone: MenuBarTone
+    ) -> NSImage {
+        let columns = [
+            MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
+            MenuBarDisplayColumn(title: "7d", percent: secondaryPercent, tone: secondaryTone)
+        ]
+        let image = NSImage(size: NSSize(width: 60, height: height))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+
+        for (index, column) in columns.enumerated() {
+            let x = CGFloat(index) * 30
+            drawCentered(
+                column.title,
+                in: NSRect(x: x, y: 12, width: 30, height: 9),
+                font: .monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold),
+                color: .secondaryLabelColor
+            )
+            drawCentered(
+                percentText(column.percent),
+                in: NSRect(x: x, y: 0, width: 30, height: 13),
+                font: .monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold),
+                color: column.tone.nsColor
+            )
+        }
+
+        return image
+    }
+
+    static func rings(
+        primaryPercent: Int?,
+        secondaryPercent: Int?,
+        primaryTone: MenuBarTone,
+        secondaryTone: MenuBarTone
+    ) -> NSImage {
+        let columns = [
+            MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
+            MenuBarDisplayColumn(title: "7d", percent: secondaryPercent, tone: secondaryTone)
+        ]
+        let image = NSImage(size: NSSize(width: 48, height: height))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+
+        for (index, column) in columns.enumerated() {
+            let x = CGFloat(index) * 24
+            drawRing(
+                percent: column.percent,
+                tone: column.tone,
+                center: NSPoint(x: x + 12, y: 11),
+                radius: 7.5
+            )
+            drawCentered(
+                column.title,
+                in: NSRect(x: x + 2, y: 7.5, width: 20, height: 9),
+                font: .monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold),
+                color: column.tone.nsColor
+            )
+        }
+
+        return image
+    }
+
+    private static func drawRing(
+        percent: Int?,
+        tone: MenuBarTone,
+        center: NSPoint,
+        radius: CGFloat
+    ) {
+        let progress = CGFloat(clampedPercent(percent) ?? 0) / 100
+        let rect = NSRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        )
+
+        let backgroundPath = NSBezierPath(ovalIn: rect)
+        backgroundPath.lineWidth = 2.5
+        NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
+        backgroundPath.stroke()
+
+        guard progress > 0 else { return }
+
+        let foregroundPath = NSBezierPath()
+        foregroundPath.appendArc(
+            withCenter: center,
+            radius: radius,
+            startAngle: 90,
+            endAngle: 90 - (360 * progress),
+            clockwise: true
+        )
+        foregroundPath.lineWidth = 2.8
+        foregroundPath.lineCapStyle = .round
+        tone.nsColor.setStroke()
+        foregroundPath.stroke()
+    }
+
+    private static func drawCentered(
+        _ text: String,
+        in rect: NSRect,
+        font: NSFont,
+        color: NSColor
+    ) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        let attributedString = NSAttributedString(
+            string: text,
+            attributes: [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        attributedString.draw(in: rect)
+    }
+
+    private static func percentText(_ percent: Int?) -> String {
+        guard let percent = clampedPercent(percent) else { return "--%" }
+        return "\(percent)%"
+    }
+
+    private static func clampedPercent(_ percent: Int?) -> Int? {
+        percent.map { max(0, min(100, $0)) }
+    }
+}
+
+private struct MenuBarDisplayColumn {
+    let title: String
+    let percent: Int?
+    let tone: MenuBarTone
+}
+
 private struct MenuContent: View {
     @ObservedObject var model: CodexStatusModel
 
@@ -173,6 +350,21 @@ private struct MenuContent: View {
                 Text("Version \(model.appVersionText)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Menu Bar View")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Picker("Menu Bar View", selection: $model.menuBarDisplayMode) {
+                    ForEach(MenuBarDisplayMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
             VStack(alignment: .leading, spacing: 10) {

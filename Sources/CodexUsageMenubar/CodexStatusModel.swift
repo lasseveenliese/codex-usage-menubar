@@ -6,11 +6,18 @@ import ServiceManagement
 @MainActor
 final class CodexStatusModel: ObservableObject {
     private static let launchAtLoginPreferenceKey = "launchAtLoginEnabled"
+    private static let menuBarDisplayModePreferenceKey = "menuBarDisplayMode"
 
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
     @Published var launchAtLoginEnabled: Bool
+    @Published var menuBarDisplayMode: MenuBarDisplayMode {
+        didSet {
+            storeMenuBarDisplayMode(menuBarDisplayMode)
+            onChange?()
+        }
+    }
     @Published private(set) var isUpdatingLaunchAtLogin = false
     var onChange: (() -> Void)?
 
@@ -19,6 +26,7 @@ final class CodexStatusModel: ObservableObject {
 
     init() {
         launchAtLoginEnabled = Self.readLaunchAtLoginPreference()
+        menuBarDisplayMode = Self.readMenuBarDisplayMode()
     }
 
     deinit {
@@ -124,7 +132,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.1"
     }
 
     var primaryMenuBarTone: MenuBarTone {
@@ -148,12 +156,43 @@ final class CodexStatusModel: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: Self.launchAtLoginPreferenceKey)
     }
 
+    private static func readMenuBarDisplayMode() -> MenuBarDisplayMode {
+        guard let rawValue = UserDefaults.standard.string(forKey: Self.menuBarDisplayModePreferenceKey) else {
+            return .classic
+        }
+
+        return MenuBarDisplayMode(rawValue: rawValue) ?? .classic
+    }
+
+    private func storeMenuBarDisplayMode(_ mode: MenuBarDisplayMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.menuBarDisplayModePreferenceKey)
+    }
+
     private func statusSegmentText(title: String, availablePercent: Int?) -> String {
         guard let availablePercent else {
             return "\(title) --%"
         }
 
         return "\(title) \(max(0, min(100, availablePercent)))%"
+    }
+}
+
+enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
+    case classic
+    case stacked
+    case rings
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .classic:
+            return "Classic"
+        case .stacked:
+            return "Compact"
+        case .rings:
+            return "Rings"
+        }
     }
 }
 
