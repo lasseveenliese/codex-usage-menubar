@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 private enum MenuBarStyle {
     static let smallFont = NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .semibold)
     static let mediumFont = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold)
@@ -71,7 +72,7 @@ final class StatusItemController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 270, height: 360)
+        popover.contentSize = NSSize(width: 270, height: 410)
         popover.contentViewController = NSHostingController(rootView: MenuContent(model: model))
 
         if let button = statusItem.button {
@@ -199,6 +200,7 @@ final class StatusItemController {
     }
 }
 
+@MainActor
 private enum MenuBarImageRenderer {
     private static let height: CGFloat = 22
 
@@ -347,6 +349,10 @@ private struct MenuContent: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let updateStatusText = model.updateStatusText {
+                UpdateStatusView(model: model, text: updateStatusText)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Menu Bar View")
                     .font(.caption)
@@ -404,13 +410,24 @@ private struct MenuContent: View {
             .toggleStyle(.checkbox)
             .disabled(model.isUpdatingLaunchAtLogin)
 
-            HStack(alignment: .top, spacing: 10) {
-                Button {
-                    Task {
-                        await model.refresh()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 10) {
+                    Button {
+                        Task {
+                            await model.refresh()
+                        }
+                    } label: {
+                        Text("Refresh Now")
                     }
-                } label: {
-                    Text("Refresh Now")
+
+                    Button {
+                        Task {
+                            await model.checkForUpdates()
+                        }
+                    } label: {
+                        Text("Check for Updates")
+                    }
+                    .disabled(model.updateState == .checking)
                 }
 
                 Button("Quit") {
@@ -427,6 +444,35 @@ private struct MenuContent: View {
         }
         .padding(12)
         .frame(width: 270)
+    }
+}
+
+private struct UpdateStatusView: View {
+    @ObservedObject var model: CodexStatusModel
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if case .available = model.updateState {
+                HStack(spacing: 10) {
+                    Button("Download") {
+                        model.openAvailableUpdateDownload()
+                    }
+
+                    Button("Later") {
+                        model.dismissAvailableUpdate()
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

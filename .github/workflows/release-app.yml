@@ -31,13 +31,27 @@ jobs:
           hdiutil create -volname "Codex Usage Menubar" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
+      - name: Create update manifest
+        run: |
+          UPDATE_MANIFEST="$RUNNER_TEMP/update.json"
+          APP_VERSION="$(tr -d '[:space:]' < VERSION)"
+          cat > "$UPDATE_MANIFEST" <<JSON
+          {
+            "version": "$APP_VERSION",
+            "downloadUrl": "https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.dmg",
+            "releaseUrl": "https://github.com/lasseveenliese/codex-usage-menubar/releases/tag/latest",
+            "minimumMacOS": "14.0"
+          }
+          JSON
+          echo "UPDATE_MANIFEST=$UPDATE_MANIFEST" >> "$GITHUB_ENV"
+
       - name: Publish latest release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest "$DMG_PATH" --clobber
+            gh release upload latest "$DMG_PATH" "$UPDATE_MANIFEST" --clobber
             gh release edit latest --notes "Automated build from $GITHUB_SHA"
           else
-            gh release create latest "$DMG_PATH" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
+            gh release create latest "$DMG_PATH" "$UPDATE_MANIFEST" --title "Latest build" --notes "Automated build from $GITHUB_SHA" --target "$GITHUB_SHA"
           fi

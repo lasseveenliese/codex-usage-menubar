@@ -23,6 +23,7 @@ The app reads the newest Codex session logs from `~/.codex` by default.
 Set `CODEX_HOME` before launching if your data lives elsewhere.
 To simulate values at launch, set `CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT` and `CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_USED_PERCENT`.
 The app only reads local Codex data and does not send usage information to external services.
+It checks GitHub periodically for app updates, but that request does not include Codex usage data.
 
 `start.command` rebuilds the app and keeps only one instance running.
 
@@ -40,4 +41,5 @@ If you trust it, right-click the app in `Applications` and choose `Open`, or use
 ## Notes
 
 - Updates once per minute.
+- Checks for app updates on launch and at most every 12 hours.
 - Falls back to `Codex -- | weekly --` if no Codex data is found.

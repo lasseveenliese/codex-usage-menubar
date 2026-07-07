@@ -7,10 +7,15 @@ import ServiceManagement
 final class CodexStatusModel: ObservableObject {
     private static let launchAtLoginPreferenceKey = "launchAtLoginEnabled"
     private static let menuBarDisplayModePreferenceKey = "menuBarDisplayMode"
+    private static let lastUpdateCheckAtPreferenceKey = "lastUpdateCheckAt"
+    private static let dismissedUpdateVersionPreferenceKey = "dismissedUpdateVersion"
+    private static let updateCheckInterval: TimeInterval = 12 * 60 * 60
 
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var updateState: UpdateState = .idle
+    @Published private(set) var lastUpdateCheckAt: Date?
     @Published var launchAtLoginEnabled: Bool
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
         didSet {
@@ -21,12 +26,13 @@ final class CodexStatusModel: ObservableObject {
     @Published private(set) var isUpdatingLaunchAtLogin = false
     var onChange: (() -> Void)?
 
-    private let provider = CodexRateLimitsProvider()
+    private let updateChecker = UpdateChecker()
     private var refreshLoopTask: Task<Void, Never>?
 
     init() {
         launchAtLoginEnabled = Self.readLaunchAtLoginPreference()
         menuBarDisplayMode = Self.readMenuBarDisplayMode()
+        lastUpdateCheckAt = Self.readLastUpdateCheckAt()
     }
 
     deinit {
@@ -35,6 +41,7 @@ final class CodexStatusModel: ObservableObject {
 
     func start() async {
         await refresh()
+        await checkForUpdatesIfNeeded()
 
         guard refreshLoopTask == nil else { return }
         refreshLoopTask = Task { [weak self] in
@@ -47,14 +54,60 @@ final class CodexStatusModel: ObservableObject {
     }
 
     func refresh() async {
-        let nextSnapshot = await Task.detached(priority: .utility) { [provider] in
-            try? provider.fetchLatestSnapshot()
+        let nextSnapshot = await Task.detached(priority: .utility) {
+            try? CodexRateLimitsProvider().fetchLatestSnapshot()
         }.value
 
         snapshot = nextSnapshot
         statusText = nextSnapshot.map(StatusText.format(snapshot:)) ?? "Codex -- | weekly --"
         lastUpdatedAt = Date()
         onChange?()
+    }
+
+    func checkForUpdatesIfNeeded() async {
+        guard shouldCheckForUpdates else { return }
+        await checkForUpdates(force: false)
+    }
+
+    func checkForUpdates(force: Bool = true) async {
+        if case .checking = updateState {
+            return
+        }
+
+        if !force, !shouldCheckForUpdates {
+            return
+        }
+
+        updateState = .checking
+        do {
+            let result = try await updateChecker.check(currentVersion: appVersionText)
+            let checkedAt = Date()
+            lastUpdateCheckAt = checkedAt
+            storeLastUpdateCheckAt(checkedAt)
+
+            switch result {
+            case .current:
+                updateState = .current
+            case .available(let update):
+                updateState = isDismissed(update) ? .current : .available(update)
+            }
+        } catch {
+            let checkedAt = Date()
+            lastUpdateCheckAt = checkedAt
+            storeLastUpdateCheckAt(checkedAt)
+            updateState = .failed
+        }
+    }
+
+    func dismissAvailableUpdate() {
+        guard case .available(let update) = updateState else { return }
+        UserDefaults.standard.set(update.version, forKey: Self.dismissedUpdateVersionPreferenceKey)
+        updateState = .current
+    }
+
+    func openAvailableUpdateDownload() {
+        guard case .available(let update) = updateState else { return }
+        NSWorkspace.shared.open(update.downloadUrl)
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) async {
@@ -132,7 +185,18 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.3"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2.0"
+    }
+
+    var updateStatusText: String? {
+        switch updateState {
+        case .checking:
+            return "Checking for updates..."
+        case .available(let update):
+            return "Update \(update.version) available"
+        case .idle, .current, .failed:
+            return nil
+        }
     }
 
     var primaryMenuBarTone: MenuBarTone {
@@ -168,6 +232,28 @@ final class CodexStatusModel: ObservableObject {
         UserDefaults.standard.set(mode.rawValue, forKey: Self.menuBarDisplayModePreferenceKey)
     }
 
+    private var shouldCheckForUpdates: Bool {
+        guard let lastUpdateCheckAt else {
+            return true
+        }
+
+        return Date().timeIntervalSince(lastUpdateCheckAt) >= Self.updateCheckInterval
+    }
+
+    private static func readLastUpdateCheckAt() -> Date? {
+        let timestamp = UserDefaults.standard.double(forKey: Self.lastUpdateCheckAtPreferenceKey)
+        guard timestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    private func storeLastUpdateCheckAt(_ date: Date) {
+        UserDefaults.standard.set(date.timeIntervalSince1970, forKey: Self.lastUpdateCheckAtPreferenceKey)
+    }
+
+    private func isDismissed(_ update: AvailableUpdate) -> Bool {
+        UserDefaults.standard.string(forKey: Self.dismissedUpdateVersionPreferenceKey) == update.version
+    }
+
     private func statusSegmentText(title: String, availablePercent: Int?) -> String {
         guard let availablePercent else {
             return "\(title) --%"
@@ -175,6 +261,14 @@ final class CodexStatusModel: ObservableObject {
 
         return "\(title) \(max(0, min(100, availablePercent)))%"
     }
+}
+
+enum UpdateState: Equatable {
+    case idle
+    case checking
+    case available(AvailableUpdate)
+    case current
+    case failed
 }
 
 enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
