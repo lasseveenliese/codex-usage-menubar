@@ -35,7 +35,7 @@ enum UpdateCheckError: Error {
 
 struct UpdateChecker {
     static let defaultManifestURL = URL(
-        string: "https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/update.json"
+        string: "https://github.com/lasseveenliese/codex-usage-menubar/releases/latest/download/update.json"
     )!
 
     let manifestURL: URL

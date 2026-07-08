@@ -31,7 +31,7 @@ It checks GitHub periodically for app updates, but that request does not include
 
 Use this if you want the packaged app without cloning the repository.
 
-[CodexUsageMenubar.dmg](https://github.com/lasseveenliese/codex-usage-menubar/releases/download/latest/CodexUsageMenubar.dmg)
+[CodexUsageMenubar.dmg](https://github.com/lasseveenliese/codex-usage-menubar/releases/latest/download/CodexUsageMenubar.dmg)
 
 Open the DMG, drag `Codex Usage Menubar.app` into `Applications`, then open it from there.
 When an update is available, the app can also install the release ZIP in place after verifying its SHA-256 checksum.
