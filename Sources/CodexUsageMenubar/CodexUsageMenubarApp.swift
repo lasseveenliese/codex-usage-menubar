@@ -246,6 +246,7 @@ private enum MenuBarImageRenderer {
             )
         }
 
+        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
         return image
     }
 
@@ -282,6 +283,7 @@ private enum MenuBarImageRenderer {
             )
         }
 
+        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
         return image
     }
 

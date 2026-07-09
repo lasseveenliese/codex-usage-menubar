@@ -337,7 +337,7 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum MenuBarTone {
+enum MenuBarTone: Equatable {
     case normal
     case warning
     case critical
