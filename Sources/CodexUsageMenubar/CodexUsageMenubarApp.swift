@@ -155,7 +155,9 @@ final class StatusItemController: NSObject {
             statusItem.length = image.size.width
         }
 
-        button.toolTip = "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
+        button.toolTip = model.usageLoadFailed
+            ? "Codex usage unavailable"
+            : "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
     }
 
     private func closePopoverIfNeeded(for event: NSEvent) {
@@ -364,6 +366,12 @@ private struct MenuContent: View {
                 UpdateStatusView(model: model, text: updateStatusText)
             }
 
+            if model.usageLoadFailed {
+                Text("Could not load reliable usage data. Try refreshing again.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Menu Bar View")
                     .font(.caption)
@@ -428,8 +436,9 @@ private struct MenuContent: View {
                             await model.refresh()
                         }
                     } label: {
-                        Text("Refresh Now")
+                        Text(model.isRefreshingUsage ? "Refreshing..." : "Refresh Now")
                     }
+                    .disabled(model.isRefreshingUsage)
 
                     Button {
                         Task {

@@ -1,0 +1,83 @@
+import XCTest
+@testable import CodexUsageMenubar
+
+final class RateLimitsReliabilityTests: XCTestCase {
+    func testIncompleteCodexResponseIsRejectedInsteadOfBecomingFullyAvailable() throws {
+        let output = jsonRPCOutput(result: """
+        {
+          "rateLimits": {},
+          "rateLimitsByLimitId": {
+            "codex": {}
+          }
+        }
+        """)
+
+        XCTAssertThrowsError(try CodexAppServerRateLimitsClient().snapshot(fromJSONRPCOutput: output))
+    }
+
+    func testCompleteCodexResponseIsAccepted() throws {
+        let output = jsonRPCOutput(result: """
+        {
+          "rateLimits": {},
+          "rateLimitsByLimitId": {
+            "codex": {
+              "primary": {"usedPercent": 22, "windowDurationMins": 300, "resetsAt": 1783651484},
+              "secondary": {"usedPercent": 3, "windowDurationMins": 10080, "resetsAt": 1784238284}
+            }
+          }
+        }
+        """)
+
+        let snapshot = try CodexAppServerRateLimitsClient().snapshot(fromJSONRPCOutput: output)
+
+        XCTAssertEqual(snapshot.primary.usedPercent, 22)
+        XCTAssertEqual(snapshot.secondary.usedPercent, 3)
+    }
+
+    func testRateLimitNotificationCanFillIncompleteResponse() throws {
+        let notification = """
+        {"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":22,"windowDurationMins":300},"secondary":{"usedPercent":3,"windowDurationMins":10080}}}}
+        """
+        let response = jsonRPCOutput(result: """
+        {
+          "rateLimits": {},
+          "rateLimitsByLimitId": {
+            "codex": {}
+          }
+        }
+        """)
+        let output = Data(notification.utf8) + Data([0x0A]) + response
+
+        let snapshot = try CodexAppServerRateLimitsClient().snapshot(fromJSONRPCOutput: output)
+
+        XCTAssertEqual(snapshot.primary.usedPercent, 22)
+        XCTAssertEqual(snapshot.secondary.usedPercent, 3)
+    }
+
+    func testOutOfRangeUsageIsRejected() {
+        let snapshot = CodexRateLimitsSnapshot(
+            primary: .init(usedPercent: -1, windowMinutes: 300, resetsAt: nil),
+            secondary: .init(usedPercent: 101, windowMinutes: 10_080, resetsAt: nil)
+        )
+
+        XCTAssertFalse(snapshot.hasValidUsage)
+    }
+
+    func testOldLogEntryIsRejected() {
+        let now = Date(timeIntervalSince1970: 2_000)
+
+        XCTAssertTrue(CodexRateLimitsProvider.isRecentLogEntry(
+            recordedAt: now.addingTimeInterval(-60),
+            now: now
+        ))
+        XCTAssertFalse(CodexRateLimitsProvider.isRecentLogEntry(
+            recordedAt: now.addingTimeInterval(-601),
+            now: now
+        ))
+    }
+
+    private func jsonRPCOutput(result: String) -> Data {
+        let resultObject = try! JSONSerialization.jsonObject(with: Data(result.utf8))
+        return try! JSONSerialization.data(withJSONObject: ["id": 2, "result": resultObject])
+    }
+}

@@ -38,27 +38,44 @@ final class CodexAppServerRateLimitsClient {
             output = try runProxy(socketPath: socketURL.path)
         }
 
+        return try snapshot(fromJSONRPCOutput: output)
+    }
+
+    func snapshot(fromJSONRPCOutput output: Data) throws -> CodexRateLimitsSnapshot {
         let response = try parseRateLimitsResponse(from: output)
 
         if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
-            return CodexRateLimitsSnapshot(
+            guard
+                let primary = codexSnapshot.primary ?? response.rateLimits.primary,
+                let secondary = codexSnapshot.secondary ?? response.rateLimits.secondary
+            else {
+                throw ClientError.noRateLimitsResponse
+            }
+
+            let snapshot = CodexRateLimitsSnapshot(
                 primary: .init(
-                    usedPercent: codexSnapshot.primary?.usedPercent ?? response.rateLimits.primary?.usedPercent ?? 0,
-                    windowMinutes: codexSnapshot.primary?.windowDurationMins ?? response.rateLimits.primary?.windowDurationMins,
-                    resetsAt: codexSnapshot.primary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.primary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                    usedPercent: primary.usedPercent,
+                    windowMinutes: primary.windowDurationMins,
+                    resetsAt: primary.resetsAt.map(Date.init(timeIntervalSince1970:))
                 ),
                 secondary: .init(
-                    usedPercent: codexSnapshot.secondary?.usedPercent ?? response.rateLimits.secondary?.usedPercent ?? 0,
-                    windowMinutes: codexSnapshot.secondary?.windowDurationMins ?? response.rateLimits.secondary?.windowDurationMins,
-                    resetsAt: codexSnapshot.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:)) ?? response.rateLimits.secondary?.resetsAt.map(Date.init(timeIntervalSince1970:))
+                    usedPercent: secondary.usedPercent,
+                    windowMinutes: secondary.windowDurationMins,
+                    resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
                 ),
                 credits: (codexSnapshot.credits ?? response.rateLimits.credits).map {
                     .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
                 }
             )
+
+            guard snapshot.hasValidUsage else {
+                throw ClientError.invalidResponse
+            }
+
+            return snapshot
         }
 
-        if let legacySnapshot = CodexRateLimitsSnapshot(response.rateLimits) {
+        if let legacySnapshot = CodexRateLimitsSnapshot(response.rateLimits), legacySnapshot.hasValidUsage {
             return legacySnapshot
         }
 
@@ -288,8 +305,8 @@ final class CodexAppServerRateLimitsClient {
 
         if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
             let mergedCodexSnapshot = AppServerRateLimitSnapshot(
-                primary: codexSnapshot.primary ?? response.rateLimits.primary,
-                secondary: codexSnapshot.secondary ?? response.rateLimits.secondary,
+                primary: codexSnapshot.primary ?? response.rateLimits.primary ?? updatedRateLimits.primary,
+                secondary: codexSnapshot.secondary ?? response.rateLimits.secondary ?? updatedRateLimits.secondary,
                 credits: codexSnapshot.credits ?? response.rateLimits.credits ?? creditsFallback
             )
 
@@ -299,8 +316,8 @@ final class CodexAppServerRateLimitsClient {
         }
 
         let mergedRateLimits = AppServerRateLimitSnapshot(
-            primary: response.rateLimits.primary,
-            secondary: response.rateLimits.secondary,
+            primary: response.rateLimits.primary ?? updatedRateLimits.primary,
+            secondary: response.rateLimits.secondary ?? updatedRateLimits.secondary,
             credits: response.rateLimits.credits ?? creditsFallback
         )
 

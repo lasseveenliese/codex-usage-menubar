@@ -22,6 +22,14 @@ struct CodexRateLimitsSnapshot: Equatable {
         self.secondary = secondary
         self.credits = credits
     }
+
+    var hasValidUsage: Bool {
+        [primary, secondary].allSatisfy { window in
+            (0...100).contains(window.usedPercent)
+                && window.windowMinutes.map { $0 > 0 } != false
+                && window.resetsAt.map { $0.timeIntervalSince1970.isFinite } != false
+        }
+    }
 }
 
 enum StatusText {
@@ -122,6 +130,7 @@ enum StatusText {
 }
 
 final class CodexRateLimitsProvider {
+    private static let maximumLogSnapshotAge: TimeInterval = 10 * 60
     private let appServerClient = CodexAppServerRateLimitsClient()
 
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
@@ -136,14 +145,14 @@ final class CodexRateLimitsProvider {
             return liveSnapshot
         }
 
-        return try scanLatestSnapshot()
+        return try scanLatestSnapshot(now: .now)
     }
 
-    private func scanLatestSnapshot() throws -> CodexRateLimitsSnapshot {
+    private func scanLatestSnapshot(now: Date) throws -> CodexRateLimitsSnapshot {
         let candidates = try candidateLogFiles()
 
         for url in candidates.prefix(12) {
-            if let snapshot = try snapshotFromLogFile(url: url) {
+            if let snapshot = try snapshotFromLogFile(url: url, now: now) {
                 return snapshot
             }
         }
@@ -184,18 +193,19 @@ final class CodexRateLimitsProvider {
             .map(\.0)
     }
 
-    private func snapshotFromLogFile(url: URL) throws -> CodexRateLimitsSnapshot? {
+    private func snapshotFromLogFile(url: URL, now: Date) throws -> CodexRateLimitsSnapshot? {
         let decoder = JSONDecoder()
         let contents = try String(contentsOf: url, encoding: .utf8)
-        var latestSnapshot: CodexRateLimitsSnapshot?
+        var latestSnapshot: (snapshot: CodexRateLimitsSnapshot, recordedAt: Date)?
 
         for line in contents.split(whereSeparator: \.isNewline) {
             guard let data = String(line).data(using: .utf8) else { continue }
             guard let entry = try? decoder.decode(CodexLogEntry.self, from: data) else { continue }
+            guard let recordedAt = entry.recordedAt else { continue }
             guard let rateLimits = entry.payload?.rateLimits else { continue }
             guard let primary = rateLimits.primary, let secondary = rateLimits.secondary else { continue }
 
-            latestSnapshot = CodexRateLimitsSnapshot(
+            let snapshot = CodexRateLimitsSnapshot(
                 primary: .init(
                     usedPercent: Int(primary.usedPercent.rounded()),
                     windowMinutes: primary.windowMinutes,
@@ -210,9 +220,24 @@ final class CodexRateLimitsProvider {
                     .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
                 }
             )
+
+            guard snapshot.hasValidUsage else { continue }
+            latestSnapshot = (snapshot, recordedAt)
         }
 
-        return latestSnapshot
+        guard
+            let latestSnapshot,
+            Self.isRecentLogEntry(recordedAt: latestSnapshot.recordedAt, now: now)
+        else {
+            return nil
+        }
+
+        return latestSnapshot.snapshot
+    }
+
+    static func isRecentLogEntry(recordedAt: Date, now: Date) -> Bool {
+        let age = now.timeIntervalSince(recordedAt)
+        return age >= 0 && age <= maximumLogSnapshotAge
     }
 
     private func codexHomeDirectory() -> URL {
@@ -312,7 +337,15 @@ final class CodexRateLimitsProvider {
 }
 
 struct CodexLogEntry: Decodable {
+    let timestamp: String?
     let payload: Payload?
+
+    var recordedAt: Date? {
+        guard let timestamp else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: timestamp)
+    }
 
     struct Payload: Decodable {
         let rateLimits: RateLimits?

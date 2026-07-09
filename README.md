@@ -19,7 +19,7 @@ cd codex-usage-menubar
 ./start.command
 ```
 
-The app reads the newest Codex session logs from `~/.codex` by default.
+The app reads usage from the local Codex app server and uses recent Codex session logs from `~/.codex` as a short-lived fallback.
 Set `CODEX_HOME` before launching if your data lives elsewhere.
 To simulate values at launch, set `CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT` and `CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_USED_PERCENT`.
 The app only reads local Codex data and does not send usage information to external services.
@@ -44,4 +44,4 @@ If you trust it, right-click the app in `Applications` and choose `Open`, or use
 - Updates once per minute.
 - Checks for app updates on launch and at most every 12 hours.
 - Can install app updates from the release ZIP after a checksum check.
-- Falls back to `Codex -- | weekly --` if no Codex data is found.
+- Shows `Usage unavailable` instead of percentages when no complete, valid, and recent Codex data is available.

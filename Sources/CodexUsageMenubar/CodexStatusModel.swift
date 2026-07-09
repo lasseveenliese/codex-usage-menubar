@@ -14,6 +14,8 @@ final class CodexStatusModel: ObservableObject {
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var usageLoadFailed = false
+    @Published private(set) var isRefreshingUsage = false
     @Published private(set) var updateState: UpdateState = .idle {
         didSet {
             scheduleCurrentStatusDismissalIfNeeded()
@@ -61,13 +63,24 @@ final class CodexStatusModel: ObservableObject {
     }
 
     func refresh() async {
+        guard !isRefreshingUsage else { return }
+        isRefreshingUsage = true
+        defer { isRefreshingUsage = false }
+
         let nextSnapshot = await Task.detached(priority: .utility) {
             try? CodexRateLimitsProvider().fetchLatestSnapshot()
         }.value
 
-        snapshot = nextSnapshot
-        statusText = nextSnapshot.map(StatusText.format(snapshot:)) ?? "Codex -- | weekly --"
-        lastUpdatedAt = Date()
+        if let nextSnapshot {
+            snapshot = nextSnapshot
+            statusText = StatusText.format(snapshot: nextSnapshot)
+            usageLoadFailed = false
+            lastUpdatedAt = Date()
+        } else {
+            snapshot = nil
+            statusText = "Usage unavailable"
+            usageLoadFailed = true
+        }
         onChange?()
     }
 
@@ -213,11 +226,15 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var lastUpdatedText: String {
-        StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
+        if usageLoadFailed {
+            return "Refresh failed"
+        }
+
+        return StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.3"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.5"
     }
 
     var updateStatusText: String? {
@@ -236,11 +253,11 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var primaryMenuBarTone: MenuBarTone {
-        MenuBarTone.from(availablePercent: primaryAvailablePercent ?? 100)
+        usageLoadFailed ? .critical : MenuBarTone.from(availablePercent: primaryAvailablePercent ?? 100)
     }
 
     var secondaryMenuBarTone: MenuBarTone {
-        MenuBarTone.from(availablePercent: secondaryAvailablePercent ?? 100)
+        usageLoadFailed ? .critical : MenuBarTone.from(availablePercent: secondaryAvailablePercent ?? 100)
     }
 
     private static func readLaunchAtLoginPreference() -> Bool {
