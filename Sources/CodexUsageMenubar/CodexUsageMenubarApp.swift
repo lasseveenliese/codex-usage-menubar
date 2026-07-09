@@ -61,17 +61,20 @@ private struct LaunchWindowView: View {
 }
 
 @MainActor
-final class StatusItemController {
+final class StatusItemController: NSObject {
     private let model = CodexStatusModel()
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
 
-    init() {
+    override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
+        super.init()
+
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentSize = NSSize(width: 270, height: 410)
         popover.contentViewController = NSHostingController(rootView: MenuContent(model: model))
 
@@ -197,6 +200,12 @@ final class StatusItemController {
         ))
 
         return result
+    }
+}
+
+extension StatusItemController: NSPopoverDelegate {
+    func popoverDidClose(_ notification: Notification) {
+        model.clearTransientUpdateStatus()
     }
 }
 

@@ -14,7 +14,11 @@ final class CodexStatusModel: ObservableObject {
     @Published var statusText = "Codex -- | weekly --"
     @Published private(set) var snapshot: CodexRateLimitsSnapshot?
     @Published private(set) var lastUpdatedAt: Date?
-    @Published private(set) var updateState: UpdateState = .idle
+    @Published private(set) var updateState: UpdateState = .idle {
+        didSet {
+            scheduleCurrentStatusDismissalIfNeeded()
+        }
+    }
     @Published private(set) var lastUpdateCheckAt: Date?
     @Published var launchAtLoginEnabled: Bool
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
@@ -29,6 +33,7 @@ final class CodexStatusModel: ObservableObject {
     private let updateChecker = UpdateChecker()
     private let updateInstaller = UpdateInstaller()
     private var refreshLoopTask: Task<Void, Never>?
+    private var transientUpdateStatusTask: Task<Void, Never>?
 
     init() {
         launchAtLoginEnabled = Self.readLaunchAtLoginPreference()
@@ -38,6 +43,7 @@ final class CodexStatusModel: ObservableObject {
 
     deinit {
         refreshLoopTask?.cancel()
+        transientUpdateStatusTask?.cancel()
     }
 
     func start() async {
@@ -107,6 +113,11 @@ final class CodexStatusModel: ObservableObject {
     func dismissAvailableUpdate() {
         guard case .available(let update) = updateState else { return }
         UserDefaults.standard.set(update.version, forKey: Self.dismissedUpdateVersionPreferenceKey)
+        updateState = .current(showStatus: false)
+    }
+
+    func clearTransientUpdateStatus() {
+        guard case .current(showStatus: true) = updateState else { return }
         updateState = .current(showStatus: false)
     }
 
@@ -206,7 +217,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.2"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.3"
     }
 
     var updateStatusText: String? {
@@ -277,6 +288,16 @@ final class CodexStatusModel: ObservableObject {
 
     private func isDismissed(_ update: AvailableUpdate) -> Bool {
         UserDefaults.standard.string(forKey: Self.dismissedUpdateVersionPreferenceKey) == update.version
+    }
+
+    private func scheduleCurrentStatusDismissalIfNeeded() {
+        transientUpdateStatusTask?.cancel()
+        guard case .current(showStatus: true) = updateState else { return }
+
+        transientUpdateStatusTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            self?.clearTransientUpdateStatus()
+        }
     }
 
     private func statusSegmentText(title: String, availablePercent: Int?) -> String {
