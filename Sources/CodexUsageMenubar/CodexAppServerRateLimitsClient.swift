@@ -261,7 +261,6 @@ final class CodexAppServerRateLimitsClient {
     private func parseRateLimitsResponse(from output: Data) throws -> AppServerRateLimitsResponse {
         let text = String(decoding: output, as: UTF8.self)
         var rateLimitsResponse: AppServerRateLimitsResponse?
-        var updatedRateLimits: AppServerRateLimitSnapshot?
 
         for line in text.split(whereSeparator: \.isNewline) {
             guard let data = String(line).data(using: .utf8) else { continue }
@@ -272,96 +271,17 @@ final class CodexAppServerRateLimitsClient {
                 continue
             }
 
-            if let notificationSnapshot = Self.updatedRateLimitsSnapshot(from: dictionary) {
-                updatedRateLimits = notificationSnapshot
-            }
-
             guard Self.messageId(dictionary) == 2 else { continue }
             guard let resultObject = dictionary["result"] else { continue }
             let resultData = try JSONSerialization.data(withJSONObject: resultObject)
             rateLimitsResponse = try JSONDecoder().decode(AppServerRateLimitsResponse.self, from: resultData)
         }
 
-        if let response = rateLimitsResponse {
-            return Self.merge(response: response, updatedRateLimits: updatedRateLimits)
-        }
-
-        if let updatedRateLimits {
-            return AppServerRateLimitsResponse(rateLimits: updatedRateLimits, rateLimitsByLimitId: nil)
+        if let rateLimitsResponse {
+            return rateLimitsResponse
         }
 
         throw ClientError.invalidResponse
-    }
-
-    private static func merge(
-        response: AppServerRateLimitsResponse,
-        updatedRateLimits: AppServerRateLimitSnapshot?
-    ) -> AppServerRateLimitsResponse {
-        guard let updatedRateLimits else {
-            return response
-        }
-
-        let creditsFallback = updatedRateLimits.credits
-
-        if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
-            let mergedCodexSnapshot = AppServerRateLimitSnapshot(
-                primary: codexSnapshot.primary ?? response.rateLimits.primary ?? updatedRateLimits.primary,
-                secondary: codexSnapshot.secondary ?? response.rateLimits.secondary ?? updatedRateLimits.secondary,
-                credits: codexSnapshot.credits ?? response.rateLimits.credits ?? creditsFallback
-            )
-
-            var rateLimitsByLimitId = response.rateLimitsByLimitId ?? [:]
-            rateLimitsByLimitId["codex"] = mergedCodexSnapshot
-            return AppServerRateLimitsResponse(rateLimits: response.rateLimits, rateLimitsByLimitId: rateLimitsByLimitId)
-        }
-
-        let mergedRateLimits = AppServerRateLimitSnapshot(
-            primary: response.rateLimits.primary ?? updatedRateLimits.primary,
-            secondary: response.rateLimits.secondary ?? updatedRateLimits.secondary,
-            credits: response.rateLimits.credits ?? creditsFallback
-        )
-
-        return AppServerRateLimitsResponse(rateLimits: mergedRateLimits, rateLimitsByLimitId: response.rateLimitsByLimitId)
-    }
-
-    private static func updatedRateLimitsSnapshot(from dictionary: [String: Any]) -> AppServerRateLimitSnapshot? {
-        guard Self.methodName(dictionary) == "account/rateLimits/updated" else {
-            return nil
-        }
-
-        if let params = dictionary["params"] as? [String: Any] {
-            return Self.decodeRateLimitsSnapshot(from: params)
-        }
-
-        return Self.decodeRateLimitsSnapshot(from: dictionary)
-    }
-
-    private static func decodeRateLimitsSnapshot(from dictionary: [String: Any]) -> AppServerRateLimitSnapshot? {
-        guard let rateLimits = dictionary["rateLimits"] else {
-            return nil
-        }
-
-        guard JSONSerialization.isValidJSONObject(rateLimits) else {
-            return nil
-        }
-
-        guard let data = try? JSONSerialization.data(withJSONObject: rateLimits) else {
-            return nil
-        }
-
-        return try? JSONDecoder().decode(AppServerRateLimitSnapshot.self, from: data)
-    }
-
-    private static func methodName(_ dictionary: [String: Any]) -> String? {
-        if let method = dictionary["method"] as? String {
-            return method
-        }
-
-        if let params = dictionary["params"] as? [String: Any], let method = params["method"] as? String {
-            return method
-        }
-
-        return nil
     }
 
     private static func messageId(_ dictionary: [String: Any]) -> Int? {

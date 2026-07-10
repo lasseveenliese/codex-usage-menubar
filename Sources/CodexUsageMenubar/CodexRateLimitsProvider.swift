@@ -26,8 +26,8 @@ struct CodexRateLimitsSnapshot: Equatable {
     var hasValidUsage: Bool {
         [primary, secondary].allSatisfy { window in
             (0...100).contains(window.usedPercent)
-                && window.windowMinutes.map { $0 > 0 } != false
-                && window.resetsAt.map { $0.timeIntervalSince1970.isFinite } != false
+                && window.windowMinutes.map { $0 > 0 } == true
+                && window.resetsAt.map { $0.timeIntervalSince1970.isFinite } == true
         }
     }
 }
@@ -130,7 +130,6 @@ enum StatusText {
 }
 
 final class CodexRateLimitsProvider {
-    private static let maximumLogSnapshotAge: TimeInterval = 10 * 60
     private let appServerClient = CodexAppServerRateLimitsClient()
 
     func fetchLatestSnapshot() throws -> CodexRateLimitsSnapshot {
@@ -141,111 +140,9 @@ final class CodexRateLimitsProvider {
             return simulatedSnapshot
         }
 
-        if let liveSnapshot = try? appServerClient.fetchLatestSnapshot() {
-            return liveSnapshot
-        }
-
-        return try scanLatestSnapshot(now: .now)
-    }
-
-    private func scanLatestSnapshot(now: Date) throws -> CodexRateLimitsSnapshot {
-        let candidates = try candidateLogFiles()
-
-        for url in candidates.prefix(12) {
-            if let snapshot = try snapshotFromLogFile(url: url, now: now) {
-                return snapshot
-            }
-        }
-
-        throw CocoaError(.fileReadNoSuchFile)
-    }
-
-    private func candidateLogFiles() throws -> [URL] {
-        let fileManager = FileManager.default
-        let codexHome = codexHomeDirectory()
-        let searchRoots = [
-            codexHome.appendingPathComponent("sessions"),
-            codexHome.appendingPathComponent("archived_sessions")
-        ]
-
-        var files: [(URL, Date)] = []
-
-        for root in searchRoots where fileManager.fileExists(atPath: root.path) {
-            let enumerator = fileManager.enumerator(
-                at: root,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            )
-
-            while let url = enumerator?.nextObject() as? URL {
-                guard url.pathExtension == "jsonl" else { continue }
-                guard url.lastPathComponent.hasPrefix("rollout-") else { continue }
-
-                let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
-                files.append((url, values.contentModificationDate ?? .distantPast))
-            }
-        }
-
-        return files
-            .sorted { lhs, rhs in
-                lhs.1 > rhs.1
-            }
-            .map(\.0)
-    }
-
-    private func snapshotFromLogFile(url: URL, now: Date) throws -> CodexRateLimitsSnapshot? {
-        let decoder = JSONDecoder()
-        let contents = try String(contentsOf: url, encoding: .utf8)
-        var latestSnapshot: (snapshot: CodexRateLimitsSnapshot, recordedAt: Date)?
-
-        for line in contents.split(whereSeparator: \.isNewline) {
-            guard let data = String(line).data(using: .utf8) else { continue }
-            guard let entry = try? decoder.decode(CodexLogEntry.self, from: data) else { continue }
-            guard let recordedAt = entry.recordedAt else { continue }
-            guard let rateLimits = entry.payload?.rateLimits else { continue }
-            guard let primary = rateLimits.primary, let secondary = rateLimits.secondary else { continue }
-
-            let snapshot = CodexRateLimitsSnapshot(
-                primary: .init(
-                    usedPercent: Int(primary.usedPercent.rounded()),
-                    windowMinutes: primary.windowMinutes,
-                    resetsAt: primary.resetsAt.map(Date.init(timeIntervalSince1970:))
-                ),
-                secondary: .init(
-                    usedPercent: Int(secondary.usedPercent.rounded()),
-                    windowMinutes: secondary.windowMinutes,
-                    resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-                ),
-                credits: entry.payload?.rateLimits?.credits.map {
-                    .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
-                }
-            )
-
-            guard snapshot.hasValidUsage else { continue }
-            latestSnapshot = (snapshot, recordedAt)
-        }
-
-        guard
-            let latestSnapshot,
-            Self.isRecentLogEntry(recordedAt: latestSnapshot.recordedAt, now: now)
-        else {
-            return nil
-        }
-
-        return latestSnapshot.snapshot
-    }
-
-    static func isRecentLogEntry(recordedAt: Date, now: Date) -> Bool {
-        let age = now.timeIntervalSince(recordedAt)
-        return age >= 0 && age <= maximumLogSnapshotAge
-    }
-
-    private func codexHomeDirectory() -> URL {
-        if let override = ProcessInfo.processInfo.environment["CODEX_HOME"], !override.isEmpty {
-            return URL(fileURLWithPath: override, isDirectory: true)
-        }
-
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
+        // Session logs can contain partial or stale rate-limit events. Showing
+        // those as current availability is worse than reporting a refresh error.
+        return try appServerClient.fetchLatestSnapshot()
     }
 
     static func simulationSnapshot(
@@ -333,49 +230,5 @@ final class CodexRateLimitsProvider {
         }
 
         return nil
-    }
-}
-
-struct CodexLogEntry: Decodable {
-    let timestamp: String?
-    let payload: Payload?
-
-    var recordedAt: Date? {
-        guard let timestamp else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: timestamp)
-    }
-
-    struct Payload: Decodable {
-        let rateLimits: RateLimits?
-
-        enum CodingKeys: String, CodingKey {
-            case rateLimits = "rate_limits"
-        }
-    }
-}
-
-struct RateLimits: Decodable {
-    let primary: Window?
-    let secondary: Window?
-    let credits: Credits?
-
-    struct Window: Decodable {
-        let usedPercent: Double
-        let windowMinutes: Int?
-        let resetsAt: TimeInterval?
-
-        enum CodingKeys: String, CodingKey {
-            case usedPercent = "used_percent"
-            case windowMinutes = "window_minutes"
-            case resetsAt = "resets_at"
-        }
-    }
-
-    struct Credits: Decodable {
-        let balance: String?
-        let hasCredits: Bool
-        let unlimited: Bool
     }
 }

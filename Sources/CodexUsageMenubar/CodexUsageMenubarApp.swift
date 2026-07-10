@@ -156,7 +156,7 @@ final class StatusItemController: NSObject {
         }
 
         button.toolTip = model.usageLoadFailed
-            ? "Codex usage unavailable"
+            ? "Codex usage unavailable; availability is hidden until a verified refresh succeeds"
             : "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
     }
 
@@ -367,7 +367,7 @@ private struct MenuContent: View {
             }
 
             if model.usageLoadFailed {
-                Text("Could not load reliable usage data. Try refreshing again.")
+                Text("Live refresh failed. Availability is hidden until a verified refresh succeeds.")
                     .font(.caption)
                     .foregroundStyle(.red)
             }

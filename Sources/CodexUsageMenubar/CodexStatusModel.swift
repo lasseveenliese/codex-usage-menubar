@@ -71,13 +71,12 @@ final class CodexStatusModel: ObservableObject {
             try? CodexRateLimitsProvider().fetchLatestSnapshot()
         }.value
 
-        if let nextSnapshot {
+        if let nextSnapshot, Self.isReliableTransition(from: snapshot, to: nextSnapshot, now: .now) {
             snapshot = nextSnapshot
             statusText = StatusText.format(snapshot: nextSnapshot)
             usageLoadFailed = false
             lastUpdatedAt = Date()
         } else {
-            snapshot = nil
             statusText = "Usage unavailable"
             usageLoadFailed = true
         }
@@ -178,11 +177,13 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var primaryAvailablePercent: Int? {
-        snapshot.map { StatusText.availablePercent(from: $0.primary.usedPercent) }
+        guard !usageLoadFailed else { return nil }
+        return snapshot.map { StatusText.availablePercent(from: $0.primary.usedPercent) }
     }
 
     var secondaryAvailablePercent: Int? {
-        snapshot.map { StatusText.availablePercent(from: $0.secondary.usedPercent) }
+        guard !usageLoadFailed else { return nil }
+        return snapshot.map { StatusText.availablePercent(from: $0.secondary.usedPercent) }
     }
 
     var primaryStatusText: String {
@@ -194,7 +195,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var primaryResetText: String {
-        guard let snapshot else {
+        guard !usageLoadFailed, let snapshot else {
             return "resets --"
         }
 
@@ -202,7 +203,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var secondaryResetText: String {
-        guard let snapshot else {
+        guard !usageLoadFailed, let snapshot else {
             return "resets --"
         }
 
@@ -210,7 +211,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     var creditsText: String {
-        guard let credits = snapshot?.credits else {
+        guard !usageLoadFailed, let credits = snapshot?.credits else {
             return "--"
         }
 
@@ -227,14 +228,15 @@ final class CodexStatusModel: ObservableObject {
 
     var lastUpdatedText: String {
         if usageLoadFailed {
-            return "Refresh failed"
+            guard let lastUpdatedAt else { return "Refresh failed" }
+            return "Refresh failed; last confirmed \(StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt))"
         }
 
         return StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
     }
 
     var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.5"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.6"
     }
 
     var updateStatusText: String? {
@@ -323,6 +325,30 @@ final class CodexStatusModel: ObservableObject {
         }
 
         return "\(title) \(max(0, min(100, availablePercent)))%"
+    }
+
+    nonisolated static func isReliableTransition(
+        from previous: CodexRateLimitsSnapshot?,
+        to next: CodexRateLimitsSnapshot,
+        now: Date
+    ) -> Bool {
+        guard let previous else { return true }
+
+        return isReliableWindowTransition(from: previous.primary, to: next.primary, now: now)
+            && isReliableWindowTransition(from: previous.secondary, to: next.secondary, now: now)
+    }
+
+    private nonisolated static func isReliableWindowTransition(
+        from previous: CodexRateLimitsSnapshot.Window,
+        to next: CodexRateLimitsSnapshot.Window,
+        now: Date
+    ) -> Bool {
+        guard let previousReset = previous.resetsAt, previousReset > now else {
+            return true
+        }
+
+        // Usage cannot suddenly drop to nearly zero before the active window resets.
+        return next.usedPercent >= previous.usedPercent || next.usedPercent > 10
     }
 }
 
