@@ -480,20 +480,24 @@ private struct UpdateStatusView: View {
             if case .available = model.updateState {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button("Install Update") {
+                        Button("Install") {
                             Task {
                                 await model.installAvailableUpdate()
                             }
                         }
+                        .buttonStyle(.borderedProminent)
 
-                        Button("Download") {
-                            model.openAvailableUpdateDownload()
+                        Button("Later") {
+                            model.dismissAvailableUpdate()
                         }
+                        .buttonStyle(.bordered)
                     }
 
-                    Button("Later") {
-                        model.dismissAvailableUpdate()
+                    Button("Download untrusted DMG") {
+                        model.openAvailableUpdateDownload()
                     }
+                    .buttonStyle(.link)
+                    .font(.caption)
                 }
             }
         }
