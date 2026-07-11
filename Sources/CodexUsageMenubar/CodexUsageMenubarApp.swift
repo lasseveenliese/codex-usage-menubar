@@ -67,6 +67,8 @@ final class StatusItemController: NSObject {
     private let popover: NSPopover
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
+    private var refreshAnimationTimer: Timer?
+    private var refreshAnimationStartedAt: Date?
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -82,7 +84,7 @@ final class StatusItemController: NSObject {
             button.target = self
             button.action = #selector(togglePopover(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            button.attributedTitle = statusItemTitle()
+            button.attributedTitle = NSAttributedString(string: "")
             button.toolTip = "Codex usage"
         }
 
@@ -130,13 +132,26 @@ final class StatusItemController: NSObject {
 
         switch model.menuBarDisplayMode {
         case .classic:
-            button.attributedTitle = statusItemTitle()
+            let image = MenuBarImageRenderer.classic(
+                primaryText: model.primaryStatusText,
+                secondaryText: model.secondaryStatusText,
+                primaryTone: model.primaryMenuBarTone,
+                secondaryTone: model.secondaryMenuBarTone,
+                loadingProgress: refreshAnimationProgress,
+                usesLightMenuBarText: usesLightMenuBarText
+            )
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = image
+            button.imagePosition = .imageOnly
+            statusItem.length = image.size.width
         case .stacked:
             let image = MenuBarImageRenderer.stacked(
                 primaryPercent: model.primaryAvailablePercent,
                 secondaryPercent: model.secondaryAvailablePercent,
                 primaryTone: model.primaryMenuBarTone,
-                secondaryTone: model.secondaryMenuBarTone
+                secondaryTone: model.secondaryMenuBarTone,
+                loadingProgress: refreshAnimationProgress,
+                usesLightMenuBarText: usesLightMenuBarText
             )
             button.attributedTitle = NSAttributedString(string: "")
             button.image = image
@@ -147,7 +162,9 @@ final class StatusItemController: NSObject {
                 primaryPercent: model.primaryAvailablePercent,
                 secondaryPercent: model.secondaryAvailablePercent,
                 primaryTone: model.primaryMenuBarTone,
-                secondaryTone: model.secondaryMenuBarTone
+                secondaryTone: model.secondaryMenuBarTone,
+                loadingProgress: refreshAnimationProgress,
+                usesLightMenuBarText: usesLightMenuBarText
             )
             button.attributedTitle = NSAttributedString(string: "")
             button.image = image
@@ -158,6 +175,36 @@ final class StatusItemController: NSObject {
         button.toolTip = model.usageLoadFailed
             ? "Codex usage unavailable; availability is hidden until a verified refresh succeeds"
             : "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
+
+        updateRefreshAnimationTimer()
+    }
+
+    private var refreshAnimationProgress: CGFloat? {
+        guard model.isRefreshingUsage, let refreshAnimationStartedAt else { return nil }
+
+        let elapsed = Date().timeIntervalSince(refreshAnimationStartedAt)
+        return CGFloat((sin((elapsed / 0.42 * .pi) - (.pi / 2)) + 1) / 2)
+    }
+
+    private var usesLightMenuBarText: Bool {
+        statusItem.button?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    private func updateRefreshAnimationTimer() {
+        guard model.isRefreshingUsage else {
+            refreshAnimationTimer?.invalidate()
+            refreshAnimationTimer = nil
+            refreshAnimationStartedAt = nil
+            return
+        }
+
+        guard refreshAnimationTimer == nil else { return }
+        refreshAnimationStartedAt = Date()
+        refreshAnimationTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStatusItem()
+            }
+        }
     }
 
     private func closePopoverIfNeeded(for event: NSEvent) {
@@ -174,35 +221,6 @@ final class StatusItemController: NSObject {
         closePopover()
     }
 
-    private func statusItemTitle() -> NSAttributedString {
-        let result = NSMutableAttributedString()
-
-        result.append(NSAttributedString(
-            string: model.primaryStatusText,
-            attributes: [
-                .font: MenuBarStyle.largeFont,
-                .foregroundColor: model.primaryMenuBarTone.nsColor
-            ]
-        ))
-
-        result.append(NSAttributedString(
-            string: " | ",
-            attributes: [
-                .font: MenuBarStyle.largeFont,
-                .foregroundColor: MenuBarStyle.hardTextColor
-            ]
-        ))
-
-        result.append(NSAttributedString(
-            string: model.secondaryStatusText,
-            attributes: [
-                .font: MenuBarStyle.largeFont,
-                .foregroundColor: model.secondaryMenuBarTone.nsColor
-            ]
-        ))
-
-        return result
-    }
 }
 
 extension StatusItemController: NSPopoverDelegate {
@@ -215,11 +233,54 @@ extension StatusItemController: NSPopoverDelegate {
 private enum MenuBarImageRenderer {
     private static let height: CGFloat = 22
 
+    static func classic(
+        primaryText: String,
+        secondaryText: String,
+        primaryTone: MenuBarTone,
+        secondaryTone: MenuBarTone,
+        loadingProgress: CGFloat?,
+        usesLightMenuBarText: Bool
+    ) -> NSImage {
+        let separator = " | "
+        let primaryAttributes: [NSAttributedString.Key: Any] = [
+            .font: MenuBarStyle.largeFont,
+            .foregroundColor: displayColor(for: primaryTone, usesLightMenuBarText: usesLightMenuBarText)
+        ]
+        let separatorAttributes: [NSAttributedString.Key: Any] = [
+            .font: MenuBarStyle.largeFont,
+            .foregroundColor: menuBarTextColor(usesLightMenuBarText: usesLightMenuBarText)
+        ]
+        let secondaryAttributes: [NSAttributedString.Key: Any] = [
+            .font: MenuBarStyle.largeFont,
+            .foregroundColor: displayColor(for: secondaryTone, usesLightMenuBarText: usesLightMenuBarText)
+        ]
+        let primaryWidth = (primaryText as NSString).size(withAttributes: primaryAttributes).width
+        let separatorWidth = (separator as NSString).size(withAttributes: separatorAttributes).width
+        let secondaryWidth = (secondaryText as NSString).size(withAttributes: secondaryAttributes).width
+        let image = NSImage(size: NSSize(width: ceil(primaryWidth + separatorWidth + secondaryWidth), height: height))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+
+        let baselineY: CGFloat = 6
+        (primaryText as NSString).draw(at: NSPoint(x: 0, y: baselineY), withAttributes: primaryAttributes)
+        (separator as NSString).draw(at: NSPoint(x: primaryWidth, y: baselineY), withAttributes: separatorAttributes)
+        (secondaryText as NSString).draw(at: NSPoint(x: primaryWidth + separatorWidth, y: baselineY), withAttributes: secondaryAttributes)
+        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+
+        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
+        return image
+    }
+
     static func stacked(
         primaryPercent: Int?,
         secondaryPercent: Int?,
         primaryTone: MenuBarTone,
-        secondaryTone: MenuBarTone
+        secondaryTone: MenuBarTone,
+        loadingProgress: CGFloat?,
+        usesLightMenuBarText: Bool
     ) -> NSImage {
         let columns = [
             MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
@@ -236,19 +297,21 @@ private enum MenuBarImageRenderer {
             let x = CGFloat(index) * 30
             drawCentered(
                 column.title,
-                in: NSRect(x: x, y: 12, width: 30, height: 9),
+                in: NSRect(x: x, y: 13, width: 30, height: 8),
                 font: MenuBarStyle.smallFont,
-                color: MenuBarStyle.softTextColor
+                color: menuBarTextColor(usesLightMenuBarText: usesLightMenuBarText).withAlphaComponent(0.48)
             )
             drawCentered(
                 percentText(column.percent),
-                in: NSRect(x: x, y: 0, width: 30, height: 13),
+                in: NSRect(x: x, y: 3, width: 30, height: 11),
                 font: MenuBarStyle.mediumFont,
-                color: column.tone.nsColor
+                color: displayColor(for: column.tone, usesLightMenuBarText: usesLightMenuBarText)
             )
         }
 
-        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
+        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+
+        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
         return image
     }
 
@@ -256,7 +319,9 @@ private enum MenuBarImageRenderer {
         primaryPercent: Int?,
         secondaryPercent: Int?,
         primaryTone: MenuBarTone,
-        secondaryTone: MenuBarTone
+        secondaryTone: MenuBarTone,
+        loadingProgress: CGFloat?,
+        usesLightMenuBarText: Bool
     ) -> NSImage {
         let columns = [
             MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
@@ -273,7 +338,7 @@ private enum MenuBarImageRenderer {
             let x = CGFloat(index) * 24
             drawRing(
                 percent: column.percent,
-                tone: column.tone,
+                color: displayColor(for: column.tone, usesLightMenuBarText: usesLightMenuBarText),
                 center: NSPoint(x: x + 12, y: 11),
                 radius: 8.5
             )
@@ -281,17 +346,51 @@ private enum MenuBarImageRenderer {
                 column.title,
                 in: NSRect(x: x + 2, y: 7, width: 20, height: 9),
                 font: MenuBarStyle.smallFont,
-                color: MenuBarStyle.hardTextColor
+                color: menuBarTextColor(usesLightMenuBarText: usesLightMenuBarText)
             )
         }
 
-        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
+        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+
+        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
         return image
+    }
+
+    private static func drawLoadingBall(progress: CGFloat?, width: CGFloat) {
+        guard let progress else { return }
+
+        let radius: CGFloat = 2.5
+        let minimumX = radius + 1
+        let maximumX = max(minimumX, width - radius - 1)
+        let center = NSPoint(x: minimumX + ((maximumX - minimumX) * progress), y: radius)
+        let stretch = sin(.pi * progress)
+        let ballWidth = (radius * 2) + (10 * stretch)
+
+        let ball = NSBezierPath(
+            roundedRect: NSRect(
+                x: center.x - (ballWidth / 2),
+                y: center.y - radius,
+                width: ballWidth,
+                height: radius * 2
+            ),
+            xRadius: radius,
+            yRadius: radius
+        )
+        NSColor.systemBlue.withAlphaComponent(0.86).setFill()
+        ball.fill()
+    }
+
+    private static func displayColor(for tone: MenuBarTone, usesLightMenuBarText: Bool) -> NSColor {
+        tone == .normal ? menuBarTextColor(usesLightMenuBarText: usesLightMenuBarText) : tone.nsColor
+    }
+
+    private static func menuBarTextColor(usesLightMenuBarText: Bool) -> NSColor {
+        usesLightMenuBarText ? .white : MenuBarStyle.hardTextColor
     }
 
     private static func drawRing(
         percent: Int?,
-        tone: MenuBarTone,
+        color: NSColor,
         center: NSPoint,
         radius: CGFloat
     ) {
@@ -308,7 +407,7 @@ private enum MenuBarImageRenderer {
         )
         foregroundPath.lineWidth = 2.0
         foregroundPath.lineCapStyle = .round
-        tone.nsColor.setStroke()
+        color.setStroke()
         foregroundPath.stroke()
     }
 

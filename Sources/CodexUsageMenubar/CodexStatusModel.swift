@@ -65,11 +65,23 @@ final class CodexStatusModel: ObservableObject {
     func refresh() async {
         guard !isRefreshingUsage else { return }
         isRefreshingUsage = true
-        defer { isRefreshingUsage = false }
+        onChange?()
+        defer {
+            isRefreshingUsage = false
+            onChange?()
+        }
+
+        let refreshStartedAt = Date()
 
         let nextSnapshot = await Task.detached(priority: .utility) {
             try? CodexRateLimitsProvider().fetchLatestSnapshot()
         }.value
+
+        let minimumIndicatorDuration: TimeInterval = 0.8
+        let elapsed = Date().timeIntervalSince(refreshStartedAt)
+        if elapsed < minimumIndicatorDuration {
+            try? await Task.sleep(for: .seconds(minimumIndicatorDuration - elapsed))
+        }
 
         if let nextSnapshot, Self.isReliableTransition(from: snapshot, to: nextSnapshot, now: .now) {
             snapshot = nextSnapshot
@@ -80,7 +92,6 @@ final class CodexStatusModel: ObservableObject {
             statusText = "Usage unavailable"
             usageLoadFailed = true
         }
-        onChange?()
     }
 
     func checkForUpdatesIfNeeded() async {
