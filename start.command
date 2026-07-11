@@ -192,8 +192,4 @@ fi
 
 echo "Launching Codex Usage Menubar"
 terminate_existing_app
-if (( ${#SIMULATION_ARGS[@]} > 0 )); then
-  open -n "$APP_PATH" --args "${SIMULATION_ARGS[@]}"
-else
-  open -n "$APP_PATH"
-fi
+"$APP_PATH/Contents/MacOS/CodexUsageMenubar" "${SIMULATION_ARGS[@]}" &
