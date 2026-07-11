@@ -200,11 +200,18 @@ final class StatusItemController: NSObject {
 
         guard refreshAnimationTimer == nil else { return }
         refreshAnimationStartedAt = Date()
-        refreshAnimationTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateStatusItem()
-            }
-        }
+        refreshAnimationTimer = Timer.scheduledTimer(
+            timeInterval: 1 / 30,
+            target: self,
+            selector: #selector(refreshAnimationTick(_:)),
+            userInfo: nil,
+            repeats: true
+        )
+    }
+
+    @objc
+    private func refreshAnimationTick(_ timer: Timer) {
+        updateStatusItem()
     }
 
     private func closePopoverIfNeeded(for event: NSEvent) {
