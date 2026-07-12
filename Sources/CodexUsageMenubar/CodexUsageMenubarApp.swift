@@ -277,7 +277,7 @@ private enum MenuBarImageRenderer {
         (secondaryText as NSString).draw(at: NSPoint(x: primaryWidth + separatorWidth, y: baselineY), withAttributes: secondaryAttributes)
         drawLoadingBall(progress: loadingProgress, width: image.size.width)
 
-        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
         return image
     }
 
@@ -318,7 +318,7 @@ private enum MenuBarImageRenderer {
 
         drawLoadingBall(progress: loadingProgress, width: image.size.width)
 
-        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
         return image
     }
 
@@ -359,7 +359,7 @@ private enum MenuBarImageRenderer {
 
         drawLoadingBall(progress: loadingProgress, width: image.size.width)
 
-        image.isTemplate = loadingProgress == nil && primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
         return image
     }
 
