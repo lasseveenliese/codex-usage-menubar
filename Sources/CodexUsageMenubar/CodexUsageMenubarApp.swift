@@ -366,12 +366,13 @@ private enum MenuBarImageRenderer {
     private static func drawLoadingBall(progress: CGFloat?, width: CGFloat) {
         guard let progress else { return }
 
-        let radius: CGFloat = 2.5
-        let minimumX = radius + 1
-        let maximumX = max(minimumX, width - radius - 1)
+        let radius: CGFloat = 1.75
+        let horizontalInset: CGFloat = 3.5
+        let minimumX = horizontalInset
+        let maximumX = max(minimumX, width - horizontalInset)
         let center = NSPoint(x: minimumX + ((maximumX - minimumX) * progress), y: radius)
         let stretch = sin(.pi * progress)
-        let ballWidth = (radius * 2) + (10 * stretch)
+        let ballWidth = (radius * 2) + (7 * stretch)
 
         let ball = NSBezierPath(
             roundedRect: NSRect(
