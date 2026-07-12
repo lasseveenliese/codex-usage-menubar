@@ -45,24 +45,26 @@ final class CodexAppServerRateLimitsClient {
         let response = try parseRateLimitsResponse(from: output)
 
         if let codexSnapshot = response.rateLimitsByLimitId?["codex"] {
-            guard
-                let primary = codexSnapshot.primary ?? response.rateLimits.primary,
-                let secondary = codexSnapshot.secondary ?? response.rateLimits.secondary
-            else {
+            let windows = [
+                ("primary", codexSnapshot.primary ?? response.rateLimits.primary),
+                ("secondary", codexSnapshot.secondary ?? response.rateLimits.secondary)
+            ].compactMap { id, window in
+                window.map {
+                    CodexRateLimitsSnapshot.Window(
+                        id: id,
+                        usedPercent: $0.usedPercent,
+                        windowMinutes: $0.windowDurationMins,
+                        resetsAt: $0.resetsAt.map(Date.init(timeIntervalSince1970:))
+                    )
+                }
+            }
+
+            guard !windows.isEmpty else {
                 throw ClientError.noRateLimitsResponse
             }
 
             let snapshot = CodexRateLimitsSnapshot(
-                primary: .init(
-                    usedPercent: primary.usedPercent,
-                    windowMinutes: primary.windowDurationMins,
-                    resetsAt: primary.resetsAt.map(Date.init(timeIntervalSince1970:))
-                ),
-                secondary: .init(
-                    usedPercent: secondary.usedPercent,
-                    windowMinutes: secondary.windowDurationMins,
-                    resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-                ),
+                windows: windows,
                 credits: (codexSnapshot.credits ?? response.rateLimits.credits).map {
                     .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
                 }
@@ -335,21 +337,22 @@ private struct AppServerRateLimitWindow: Decodable {
 
 extension CodexRateLimitsSnapshot {
     fileprivate init?(_ snapshot: AppServerRateLimitSnapshot) {
-        guard let primary = snapshot.primary, let secondary = snapshot.secondary else {
+        let windows = [("primary", snapshot.primary), ("secondary", snapshot.secondary)].compactMap { id, window in
+            window.map {
+                Window(
+                    id: id,
+                    usedPercent: $0.usedPercent,
+                    windowMinutes: $0.windowDurationMins,
+                    resetsAt: $0.resetsAt.map(Date.init(timeIntervalSince1970:))
+                )
+            }
+        }
+        guard !windows.isEmpty else {
             return nil
         }
 
         self.init(
-            primary: .init(
-                usedPercent: primary.usedPercent,
-                windowMinutes: primary.windowDurationMins,
-                resetsAt: primary.resetsAt.map(Date.init(timeIntervalSince1970:))
-            ),
-            secondary: .init(
-                usedPercent: secondary.usedPercent,
-                windowMinutes: secondary.windowDurationMins,
-                resetsAt: secondary.resetsAt.map(Date.init(timeIntervalSince1970:))
-            ),
+            windows: windows,
             credits: snapshot.credits.map {
                 .init(balance: $0.balance, hasCredits: $0.hasCredits, unlimited: $0.unlimited)
             }

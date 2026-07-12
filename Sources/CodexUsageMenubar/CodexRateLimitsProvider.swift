@@ -8,23 +8,22 @@ struct CodexRateLimitsSnapshot: Equatable {
     }
 
     struct Window: Equatable {
+        let id: String
         let usedPercent: Int
         let windowMinutes: Int?
         let resetsAt: Date?
     }
 
-    let primary: Window
-    let secondary: Window
+    let windows: [Window]
     let credits: Credits?
 
-    init(primary: Window, secondary: Window, credits: Credits? = nil) {
-        self.primary = primary
-        self.secondary = secondary
+    init(windows: [Window], credits: Credits? = nil) {
+        self.windows = windows
         self.credits = credits
     }
 
     var hasValidUsage: Bool {
-        [primary, secondary].allSatisfy { window in
+        !windows.isEmpty && windows.allSatisfy { window in
             (0...100).contains(window.usedPercent)
                 && window.windowMinutes.map { $0 > 0 } == true
                 && window.resetsAt.map { $0.timeIntervalSince1970.isFinite } == true
@@ -34,7 +33,14 @@ struct CodexRateLimitsSnapshot: Equatable {
 
 enum StatusText {
     static func format(snapshot: CodexRateLimitsSnapshot) -> String {
-        "5h \(availablePercent(from: snapshot.primary.usedPercent))% | 7d \(availablePercent(from: snapshot.secondary.usedPercent))%"
+        snapshot.windows.map { "\(windowTitle($0)) \(availablePercent(from: $0.usedPercent))%" }.joined(separator: " | ")
+    }
+
+    static func windowTitle(_ window: CodexRateLimitsSnapshot.Window) -> String {
+        guard let minutes = window.windowMinutes else { return window.id }
+        if minutes % 1_440 == 0 { return "\(minutes / 1_440)d" }
+        if minutes % 60 == 0 { return "\(minutes / 60)h" }
+        return "\(minutes)m"
     }
 
     static func availablePercent(from usedPercent: Int) -> Int {
@@ -174,26 +180,29 @@ final class CodexRateLimitsProvider {
 
         let now = Date()
         return CodexRateLimitsSnapshot(
-            primary: simulationWindow(
+            windows: [simulationWindow(
+                id: "primary",
                 displayPercent: primaryDisplayPercent,
                 windowMinutes: 300,
                 resetsAt: Calendar.current.date(byAdding: .hour, value: 5, to: now)
-            ),
-            secondary: simulationWindow(
+            ), simulationWindow(
+                id: "secondary",
                 displayPercent: secondaryDisplayPercent,
                 windowMinutes: 10_080,
                 resetsAt: Calendar.current.date(byAdding: .day, value: 7, to: now)
-            )
+            )]
         )
     }
 
     private static func simulationWindow(
+        id: String,
         displayPercent: Int,
         windowMinutes: Int,
         resetsAt: Date?
     ) -> CodexRateLimitsSnapshot.Window {
         let clampedDisplayPercent = max(0, min(100, displayPercent))
         return .init(
+            id: id,
             usedPercent: max(0, min(100, 100 - clampedDisplayPercent)),
             windowMinutes: windowMinutes,
             resetsAt: resetsAt

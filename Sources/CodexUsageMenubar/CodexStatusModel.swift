@@ -3,6 +3,14 @@ import Combine
 import Foundation
 import ServiceManagement
 
+struct UsageWindowDisplay: Identifiable {
+    let id: String
+    let title: String
+    let availablePercent: Int?
+    let resetText: String
+    let tone: MenuBarTone
+}
+
 @MainActor
 final class CodexStatusModel: ObservableObject {
     private static let launchAtLoginPreferenceKey = "launchAtLoginEnabled"
@@ -187,38 +195,26 @@ final class CodexStatusModel: ObservableObject {
         }
     }
 
-    var primaryAvailablePercent: Int? {
-        guard !usageLoadFailed else { return nil }
-        return snapshot.map { StatusText.availablePercent(from: $0.primary.usedPercent) }
-    }
-
-    var secondaryAvailablePercent: Int? {
-        guard !usageLoadFailed else { return nil }
-        return snapshot.map { StatusText.availablePercent(from: $0.secondary.usedPercent) }
-    }
-
-    var primaryStatusText: String {
-        statusSegmentText(title: "5h", availablePercent: primaryAvailablePercent)
-    }
-
-    var secondaryStatusText: String {
-        statusSegmentText(title: "7d", availablePercent: secondaryAvailablePercent)
-    }
-
-    var primaryResetText: String {
-        guard !usageLoadFailed, let snapshot else {
-            return "resets --"
+    var usageWindows: [UsageWindowDisplay] {
+        guard let snapshot else {
+            return [.init(
+                id: "unavailable",
+                title: "Usage",
+                availablePercent: nil,
+                resetText: "resets --",
+                tone: usageLoadFailed ? .critical : .normal
+            )]
         }
-
-        return StatusText.resetCountdownText(for: snapshot.primary)
-    }
-
-    var secondaryResetText: String {
-        guard !usageLoadFailed, let snapshot else {
-            return "resets --"
+        return snapshot.windows.map { window in
+            let availablePercent = usageLoadFailed ? nil : StatusText.availablePercent(from: window.usedPercent)
+            return UsageWindowDisplay(
+                id: window.id,
+                title: StatusText.windowTitle(window),
+                availablePercent: availablePercent,
+                resetText: usageLoadFailed ? "resets --" : StatusText.resetCountdownText(for: window),
+                tone: usageLoadFailed ? .critical : MenuBarTone.from(availablePercent: availablePercent ?? 100)
+            )
         }
-
-        return StatusText.resetCountdownText(for: snapshot.secondary)
     }
 
     var creditsText: String {
@@ -263,14 +259,6 @@ final class CodexStatusModel: ObservableObject {
         case .idle, .current(showStatus: false), .failed:
             return nil
         }
-    }
-
-    var primaryMenuBarTone: MenuBarTone {
-        usageLoadFailed ? .critical : MenuBarTone.from(availablePercent: primaryAvailablePercent ?? 100)
-    }
-
-    var secondaryMenuBarTone: MenuBarTone {
-        usageLoadFailed ? .critical : MenuBarTone.from(availablePercent: secondaryAvailablePercent ?? 100)
     }
 
     private static func readLaunchAtLoginPreference() -> Bool {
@@ -330,14 +318,6 @@ final class CodexStatusModel: ObservableObject {
         }
     }
 
-    private func statusSegmentText(title: String, availablePercent: Int?) -> String {
-        guard let availablePercent else {
-            return "\(title) --%"
-        }
-
-        return "\(title) \(max(0, min(100, availablePercent)))%"
-    }
-
     nonisolated static func isReliableTransition(
         from previous: CodexRateLimitsSnapshot?,
         to next: CodexRateLimitsSnapshot,
@@ -345,8 +325,11 @@ final class CodexStatusModel: ObservableObject {
     ) -> Bool {
         guard let previous else { return true }
 
-        return isReliableWindowTransition(from: previous.primary, to: next.primary, now: now)
-            && isReliableWindowTransition(from: previous.secondary, to: next.secondary, now: now)
+        let previousWindows = Dictionary(uniqueKeysWithValues: previous.windows.map { ($0.id, $0) })
+        return next.windows.allSatisfy { window in
+            guard let previousWindow = previousWindows[window.id] else { return true }
+            return isReliableWindowTransition(from: previousWindow, to: window, now: now)
+        }
     }
 
     private nonisolated static func isReliableWindowTransition(

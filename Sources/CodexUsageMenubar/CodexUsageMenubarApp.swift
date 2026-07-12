@@ -133,10 +133,7 @@ final class StatusItemController: NSObject {
         switch model.menuBarDisplayMode {
         case .classic:
             let image = MenuBarImageRenderer.classic(
-                primaryText: model.primaryStatusText,
-                secondaryText: model.secondaryStatusText,
-                primaryTone: model.primaryMenuBarTone,
-                secondaryTone: model.secondaryMenuBarTone,
+                columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
@@ -146,10 +143,7 @@ final class StatusItemController: NSObject {
             statusItem.length = image.size.width
         case .stacked:
             let image = MenuBarImageRenderer.stacked(
-                primaryPercent: model.primaryAvailablePercent,
-                secondaryPercent: model.secondaryAvailablePercent,
-                primaryTone: model.primaryMenuBarTone,
-                secondaryTone: model.secondaryMenuBarTone,
+                columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
@@ -159,10 +153,7 @@ final class StatusItemController: NSObject {
             statusItem.length = image.size.width
         case .rings:
             let image = MenuBarImageRenderer.rings(
-                primaryPercent: model.primaryAvailablePercent,
-                secondaryPercent: model.secondaryAvailablePercent,
-                primaryTone: model.primaryMenuBarTone,
-                secondaryTone: model.secondaryMenuBarTone,
+                columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
@@ -174,7 +165,7 @@ final class StatusItemController: NSObject {
 
         button.toolTip = model.usageLoadFailed
             ? "Codex usage unavailable; availability is hidden until a verified refresh succeeds"
-            : "Codex usage: \(model.primaryStatusText) | \(model.secondaryStatusText)"
+            : "Codex usage: \(model.statusText)"
 
         updateRefreshAnimationTimer()
     }
@@ -184,6 +175,10 @@ final class StatusItemController: NSObject {
 
         let elapsed = Date().timeIntervalSince(refreshAnimationStartedAt)
         return CGFloat((sin((elapsed / 0.42 * .pi) - (.pi / 2)) + 1) / 2)
+    }
+
+    private var menuBarColumns: [MenuBarDisplayColumn] {
+        model.usageWindows.map { .init(title: $0.title, percent: $0.availablePercent, tone: $0.tone) }
     }
 
     private var usesLightMenuBarText: Bool {
@@ -241,30 +236,25 @@ private enum MenuBarImageRenderer {
     private static let height: CGFloat = 22
 
     static func classic(
-        primaryText: String,
-        secondaryText: String,
-        primaryTone: MenuBarTone,
-        secondaryTone: MenuBarTone,
+        columns: [MenuBarDisplayColumn],
         loadingProgress: CGFloat?,
         usesLightMenuBarText: Bool
     ) -> NSImage {
-        let separator = " | "
-        let primaryAttributes: [NSAttributedString.Key: Any] = [
-            .font: MenuBarStyle.largeFont,
-            .foregroundColor: displayColor(for: primaryTone, usesLightMenuBarText: usesLightMenuBarText)
-        ]
         let separatorAttributes: [NSAttributedString.Key: Any] = [
             .font: MenuBarStyle.largeFont,
             .foregroundColor: menuBarTextColor(usesLightMenuBarText: usesLightMenuBarText)
         ]
-        let secondaryAttributes: [NSAttributedString.Key: Any] = [
-            .font: MenuBarStyle.largeFont,
-            .foregroundColor: displayColor(for: secondaryTone, usesLightMenuBarText: usesLightMenuBarText)
-        ]
-        let primaryWidth = (primaryText as NSString).size(withAttributes: primaryAttributes).width
+        let separator = " | "
         let separatorWidth = (separator as NSString).size(withAttributes: separatorAttributes).width
-        let secondaryWidth = (secondaryText as NSString).size(withAttributes: secondaryAttributes).width
-        let image = NSImage(size: NSSize(width: ceil(primaryWidth + separatorWidth + secondaryWidth), height: height))
+        let entries = columns.map { column in
+            let text = isPlaceholder(columns) ? "%" : "\(column.title) \(percentText(column.percent))"
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: MenuBarStyle.largeFont,
+                .foregroundColor: displayColor(for: column.tone, usesLightMenuBarText: usesLightMenuBarText)
+            ]
+            return (text, attributes, (text as NSString).size(withAttributes: attributes).width)
+        }
+        let image = NSImage(size: NSSize(width: ceil(entries.reduce(0) { $0 + $1.2 } + CGFloat(max(0, entries.count - 1)) * separatorWidth), height: height))
         image.lockFocus()
         defer { image.unlockFocus() }
 
@@ -272,28 +262,30 @@ private enum MenuBarImageRenderer {
         NSRect(origin: .zero, size: image.size).fill()
 
         let baselineY: CGFloat = 6
-        (primaryText as NSString).draw(at: NSPoint(x: 0, y: baselineY), withAttributes: primaryAttributes)
-        (separator as NSString).draw(at: NSPoint(x: primaryWidth, y: baselineY), withAttributes: separatorAttributes)
-        (secondaryText as NSString).draw(at: NSPoint(x: primaryWidth + separatorWidth, y: baselineY), withAttributes: secondaryAttributes)
-        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+        var x: CGFloat = 0
+        for (index, entry) in entries.enumerated() {
+            (entry.0 as NSString).draw(at: NSPoint(x: x, y: baselineY), withAttributes: entry.1)
+            x += entry.2
+            if index < entries.count - 1 {
+                (separator as NSString).draw(at: NSPoint(x: x, y: baselineY), withAttributes: separatorAttributes)
+                x += separatorWidth
+            }
+        }
+        drawLoadingBall(progress: loadingProgress, width: image.size.width, color: loadingColor(for: columns))
 
-        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = columns.allSatisfy { $0.tone == .normal }
         return image
     }
 
     static func stacked(
-        primaryPercent: Int?,
-        secondaryPercent: Int?,
-        primaryTone: MenuBarTone,
-        secondaryTone: MenuBarTone,
+        columns: [MenuBarDisplayColumn],
         loadingProgress: CGFloat?,
         usesLightMenuBarText: Bool
     ) -> NSImage {
-        let columns = [
-            MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
-            MenuBarDisplayColumn(title: "7d", percent: secondaryPercent, tone: secondaryTone)
-        ]
-        let image = NSImage(size: NSSize(width: 60, height: height))
+        if isPlaceholder(columns) {
+            return classic(columns: columns, loadingProgress: loadingProgress, usesLightMenuBarText: usesLightMenuBarText)
+        }
+        let image = NSImage(size: NSSize(width: CGFloat(columns.count) * 30, height: height))
         image.lockFocus()
         defer { image.unlockFocus() }
 
@@ -316,25 +308,21 @@ private enum MenuBarImageRenderer {
             )
         }
 
-        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+        drawLoadingBall(progress: loadingProgress, width: image.size.width, color: loadingColor(for: columns))
 
-        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = columns.allSatisfy { $0.tone == .normal }
         return image
     }
 
     static func rings(
-        primaryPercent: Int?,
-        secondaryPercent: Int?,
-        primaryTone: MenuBarTone,
-        secondaryTone: MenuBarTone,
+        columns: [MenuBarDisplayColumn],
         loadingProgress: CGFloat?,
         usesLightMenuBarText: Bool
     ) -> NSImage {
-        let columns = [
-            MenuBarDisplayColumn(title: "5h", percent: primaryPercent, tone: primaryTone),
-            MenuBarDisplayColumn(title: "7d", percent: secondaryPercent, tone: secondaryTone)
-        ]
-        let image = NSImage(size: NSSize(width: 48, height: height))
+        if isPlaceholder(columns) {
+            return classic(columns: columns, loadingProgress: loadingProgress, usesLightMenuBarText: usesLightMenuBarText)
+        }
+        let image = NSImage(size: NSSize(width: CGFloat(columns.count) * 24, height: height))
         image.lockFocus()
         defer { image.unlockFocus() }
 
@@ -357,13 +345,13 @@ private enum MenuBarImageRenderer {
             )
         }
 
-        drawLoadingBall(progress: loadingProgress, width: image.size.width)
+        drawLoadingBall(progress: loadingProgress, width: image.size.width, color: loadingColor(for: columns))
 
-        image.isTemplate = primaryTone == .normal && secondaryTone == .normal
+        image.isTemplate = columns.allSatisfy { $0.tone == .normal }
         return image
     }
 
-    private static func drawLoadingBall(progress: CGFloat?, width: CGFloat) {
+    private static func drawLoadingBall(progress: CGFloat?, width: CGFloat, color: NSColor) {
         guard let progress else { return }
 
         let radius: CGFloat = 1.75
@@ -384,8 +372,12 @@ private enum MenuBarImageRenderer {
             xRadius: radius,
             yRadius: radius
         )
-        NSColor.systemBlue.withAlphaComponent(0.86).setFill()
+        color.withAlphaComponent(0.86).setFill()
         ball.fill()
+    }
+
+    private static func loadingColor(for columns: [MenuBarDisplayColumn]) -> NSColor {
+        columns.first(where: { $0.tone != .normal })?.tone.nsColor ?? .systemBlue
     }
 
     private static func displayColor(for tone: MenuBarTone, usesLightMenuBarText: Bool) -> NSColor {
@@ -441,6 +433,10 @@ private enum MenuBarImageRenderer {
     private static func percentText(_ percent: Int?) -> String {
         guard let percent = clampedPercent(percent) else { return "--%" }
         return "\(percent)%"
+    }
+
+    private static func isPlaceholder(_ columns: [MenuBarDisplayColumn]) -> Bool {
+        columns.count == 1 && columns[0].title == "Usage" && columns[0].percent == nil
     }
 
     private static func clampedPercent(_ percent: Int?) -> Int? {
@@ -500,17 +496,13 @@ private struct MenuContent: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                AvailabilityBar(
-                    title: "5h",
-                    availablePercent: model.primaryAvailablePercent,
-                    resetText: model.primaryResetText
-                )
-
-                AvailabilityBar(
-                    title: "7d",
-                    availablePercent: model.secondaryAvailablePercent,
-                    resetText: model.secondaryResetText
-                )
+                ForEach(model.usageWindows) { window in
+                    AvailabilityBar(
+                        title: window.title,
+                        availablePercent: window.availablePercent,
+                        resetText: window.resetText
+                    )
+                }
             }
 
             HStack {
