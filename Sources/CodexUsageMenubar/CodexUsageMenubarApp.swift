@@ -261,7 +261,7 @@ private enum MenuBarImageRenderer {
         NSColor.clear.setFill()
         NSRect(origin: .zero, size: image.size).fill()
 
-        let baselineY: CGFloat = 6
+        let baselineY: CGFloat = 3
         var x: CGFloat = 0
         for (index, entry) in entries.enumerated() {
             (entry.0 as NSString).draw(at: NSPoint(x: x, y: baselineY), withAttributes: entry.1)
