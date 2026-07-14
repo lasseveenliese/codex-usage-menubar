@@ -341,6 +341,11 @@ final class CodexStatusModel: ObservableObject {
             return true
         }
 
+        // A manual reset starts a fresh window before the previous one expires.
+        if let nextReset = next.resetsAt, nextReset > previousReset {
+            return true
+        }
+
         // Usage cannot suddenly drop to nearly zero before the active window resets.
         return next.usedPercent >= previous.usedPercent || next.usedPercent > 10
     }

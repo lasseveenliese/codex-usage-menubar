@@ -109,6 +109,22 @@ final class RateLimitsReliabilityTests: XCTestCase {
         XCTAssertFalse(CodexStatusModel.isReliableTransition(from: previous, to: next, now: now))
     }
 
+    func testManualResetWithLaterResetTimeIsAccepted() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let previous = CodexRateLimitsSnapshot(
+            windows: [
+                .init(id: "primary", usedPercent: 100, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(1_000))
+            ]
+        )
+        let next = CodexRateLimitsSnapshot(
+            windows: [
+                .init(id: "primary", usedPercent: 6, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(604_800))
+            ]
+        )
+
+        XCTAssertTrue(CodexStatusModel.isReliableTransition(from: previous, to: next, now: now))
+    }
+
     private func jsonRPCOutput(result: String) -> Data {
         let resultObject = try! JSONSerialization.jsonObject(with: Data(result.utf8))
         return try! JSONSerialization.data(withJSONObject: ["id": 2, "result": resultObject])
