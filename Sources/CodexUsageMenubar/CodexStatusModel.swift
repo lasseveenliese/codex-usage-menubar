@@ -13,7 +13,6 @@ struct UsageWindowDisplay: Identifiable {
 
 @MainActor
 final class CodexStatusModel: ObservableObject {
-    private static let launchAtLoginPreferenceKey = "launchAtLoginEnabled"
     private static let menuBarDisplayModePreferenceKey = "menuBarDisplayMode"
     private static let lastUpdateCheckAtPreferenceKey = "lastUpdateCheckAt"
     private static let dismissedUpdateVersionPreferenceKey = "dismissedUpdateVersion"
@@ -29,6 +28,8 @@ final class CodexStatusModel: ObservableObject {
             scheduleCurrentStatusDismissalIfNeeded()
         }
     }
+    @Published private(set) var updateErrorText: String?
+    @Published private(set) var launchAtLoginStatusText: String?
     @Published private(set) var lastUpdateCheckAt: Date?
     @Published var launchAtLoginEnabled: Bool
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
@@ -40,15 +41,25 @@ final class CodexStatusModel: ObservableObject {
     @Published private(set) var isUpdatingLaunchAtLogin = false
     var onChange: (() -> Void)?
 
-    private let updateChecker = UpdateChecker()
+    private let updateChecker: UpdateChecker
+    private let defaults: UserDefaults
     private let updateInstaller = UpdateInstaller()
     private var refreshLoopTask: Task<Void, Never>?
     private var transientUpdateStatusTask: Task<Void, Never>?
 
-    init() {
-        launchAtLoginEnabled = Self.readLaunchAtLoginPreference()
-        menuBarDisplayMode = Self.readMenuBarDisplayMode()
-        lastUpdateCheckAt = Self.readLastUpdateCheckAt()
+    let appVersionText: String
+
+    init(
+        updateChecker: UpdateChecker = UpdateChecker(),
+        defaults: UserDefaults = .standard,
+        appVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.6"
+    ) {
+        appVersionText = appVersion
+        self.updateChecker = updateChecker
+        self.defaults = defaults
+        launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+        menuBarDisplayMode = Self.readMenuBarDisplayMode(defaults: defaults)
+        lastUpdateCheckAt = Self.readLastUpdateCheckAt(defaults: defaults)
     }
 
     deinit {
@@ -63,9 +74,14 @@ final class CodexStatusModel: ObservableObject {
         guard refreshLoopTask == nil else { return }
         refreshLoopTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    return
+                }
                 guard let self else { return }
                 await self.refresh()
+                await self.checkForUpdatesIfNeeded()
             }
         }
     }
@@ -120,6 +136,7 @@ final class CodexStatusModel: ObservableObject {
             return
         }
 
+        updateErrorText = nil
         updateState = .checking
         do {
             let result = try await updateChecker.check(currentVersion: appVersionText)
@@ -131,19 +148,21 @@ final class CodexStatusModel: ObservableObject {
             case .current:
                 updateState = .current(showStatus: force)
             case .available(let update):
-                updateState = isDismissed(update) ? .current(showStatus: false) : .available(update)
+                updateState = (!force && isDismissed(update)) ? .current(showStatus: false) : .available(update)
             }
         } catch {
             let checkedAt = Date()
             lastUpdateCheckAt = checkedAt
             storeLastUpdateCheckAt(checkedAt)
+            updateErrorText = "Could not check for updates. Try again."
             updateState = .failed
         }
     }
 
     func dismissAvailableUpdate() {
         guard case .available(let update) = updateState else { return }
-        UserDefaults.standard.set(update.version, forKey: Self.dismissedUpdateVersionPreferenceKey)
+        updateErrorText = nil
+        defaults.set(update.version, forKey: Self.dismissedUpdateVersionPreferenceKey)
         updateState = .current(showStatus: false)
     }
 
@@ -159,29 +178,27 @@ final class CodexStatusModel: ObservableObject {
 
     func installAvailableUpdate() async {
         guard case .available(let update) = updateState else { return }
+        guard update.isCompatible else { return }
         guard update.canInstallInApp else {
             NSWorkspace.shared.open(update.downloadUrl)
             return
         }
 
+        updateErrorText = nil
         updateState = .installing(update)
         do {
             try await updateInstaller.install(update: update)
             NSApplication.shared.terminate(nil)
         } catch {
+            updateErrorText = "Could not install the update. Try again."
             updateState = .available(update)
         }
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) async {
         guard !isUpdatingLaunchAtLogin else { return }
-        let previousValue = launchAtLoginEnabled
-        launchAtLoginEnabled = enabled
-        storeLaunchAtLoginPreference(enabled)
         isUpdatingLaunchAtLogin = true
-        defer {
-            isUpdatingLaunchAtLogin = false
-        }
+        defer { isUpdatingLaunchAtLogin = false }
 
         do {
             if enabled {
@@ -189,10 +206,19 @@ final class CodexStatusModel: ObservableObject {
             } else {
                 try await SMAppService.mainApp.unregister()
             }
+            syncLaunchAtLoginStatus()
         } catch {
-            launchAtLoginEnabled = previousValue
-            storeLaunchAtLoginPreference(previousValue)
+            syncLaunchAtLoginStatus()
+            launchAtLoginStatusText = "Could not change launch at login. Try again."
         }
+    }
+
+    func syncLaunchAtLoginStatus() {
+        let status = SMAppService.mainApp.status
+        launchAtLoginEnabled = status == .enabled
+        launchAtLoginStatusText = status == .requiresApproval
+            ? "Allow launch at login in System Settings > General > Login Items."
+            : nil
     }
 
     var usageWindows: [UsageWindowDisplay] {
@@ -242,10 +268,6 @@ final class CodexStatusModel: ObservableObject {
         return StatusText.updatedAtText(lastUpdatedAt: lastUpdatedAt)
     }
 
-    var appVersionText: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.6"
-    }
-
     var updateStatusText: String? {
         switch updateState {
         case .checking:
@@ -261,21 +283,8 @@ final class CodexStatusModel: ObservableObject {
         }
     }
 
-    private static func readLaunchAtLoginPreference() -> Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.launchAtLoginPreferenceKey) != nil {
-            return defaults.bool(forKey: Self.launchAtLoginPreferenceKey)
-        }
-
-        return SMAppService.mainApp.status == .enabled
-    }
-
-    private func storeLaunchAtLoginPreference(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: Self.launchAtLoginPreferenceKey)
-    }
-
-    private static func readMenuBarDisplayMode() -> MenuBarDisplayMode {
-        guard let rawValue = UserDefaults.standard.string(forKey: Self.menuBarDisplayModePreferenceKey) else {
+    private static func readMenuBarDisplayMode(defaults: UserDefaults) -> MenuBarDisplayMode {
+        guard let rawValue = defaults.string(forKey: Self.menuBarDisplayModePreferenceKey) else {
             return .classic
         }
 
@@ -283,7 +292,7 @@ final class CodexStatusModel: ObservableObject {
     }
 
     private func storeMenuBarDisplayMode(_ mode: MenuBarDisplayMode) {
-        UserDefaults.standard.set(mode.rawValue, forKey: Self.menuBarDisplayModePreferenceKey)
+        defaults.set(mode.rawValue, forKey: Self.menuBarDisplayModePreferenceKey)
     }
 
     private var shouldCheckForUpdates: Bool {
@@ -294,18 +303,18 @@ final class CodexStatusModel: ObservableObject {
         return Date().timeIntervalSince(lastUpdateCheckAt) >= Self.updateCheckInterval
     }
 
-    private static func readLastUpdateCheckAt() -> Date? {
-        let timestamp = UserDefaults.standard.double(forKey: Self.lastUpdateCheckAtPreferenceKey)
+    private static func readLastUpdateCheckAt(defaults: UserDefaults) -> Date? {
+        let timestamp = defaults.double(forKey: Self.lastUpdateCheckAtPreferenceKey)
         guard timestamp > 0 else { return nil }
         return Date(timeIntervalSince1970: timestamp)
     }
 
     private func storeLastUpdateCheckAt(_ date: Date) {
-        UserDefaults.standard.set(date.timeIntervalSince1970, forKey: Self.lastUpdateCheckAtPreferenceKey)
+        defaults.set(date.timeIntervalSince1970, forKey: Self.lastUpdateCheckAtPreferenceKey)
     }
 
     private func isDismissed(_ update: AvailableUpdate) -> Bool {
-        UserDefaults.standard.string(forKey: Self.dismissedUpdateVersionPreferenceKey) == update.version
+        defaults.string(forKey: Self.dismissedUpdateVersionPreferenceKey) == update.version
     }
 
     private func scheduleCurrentStatusDismissalIfNeeded() {
