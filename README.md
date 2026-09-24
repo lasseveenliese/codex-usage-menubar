@@ -43,8 +43,7 @@ If you trust it, right-click the app in `Applications` and choose `Open`, or use
 ## Notes
 
 - Updates once per minute.
-- Optional Liquid Glass popup on macOS 26 or newer; toggle it with the saved checkbox. Off by default.
-- The normal popup remains available on macOS 14 and newer.
+- Uses a native macOS popup on macOS 14 and newer.
 - Checks for app updates on launch and every 12 hours while running.
 - “Later” hides that version from automatic checks; a manual check shows it again.
 - Update installation requires a compatible macOS version.
