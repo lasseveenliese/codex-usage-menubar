@@ -178,6 +178,7 @@ PLIST
 build_app_icon
 
 swiftc \
+  -target "$(uname -m)-apple-macosx14.0" \
   -module-cache-path "$MODULE_CACHE" \
   "$ROOT_DIR"/Sources/CodexUsageMenubar/*.swift \
   -framework AppKit \

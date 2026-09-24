@@ -444,7 +444,7 @@ private struct MenuBarDisplayColumn {
     let tone: MenuBarTone
 }
 
-private struct MenuContent: View {
+struct MenuContent: View {
     @ObservedObject var model: CodexStatusModel
 
     var body: some View {
@@ -517,6 +517,15 @@ private struct MenuContent: View {
                     .foregroundStyle(.secondary)
             }
 
+            if #available(macOS 26.0, *) {
+                Toggle("Liquid Glass", isOn: $model.liquidGlassEnabled)
+                    .toggleStyle(.checkbox)
+            } else {
+                Toggle("Liquid Glass (macOS 26+)", isOn: .constant(false))
+                    .toggleStyle(.checkbox)
+                    .disabled(true)
+            }
+
             Toggle("Launch at login", isOn: Binding(
                 get: { model.launchAtLoginEnabled },
                 set: { newValue in
@@ -569,6 +578,20 @@ private struct MenuContent: View {
         }
         .padding(12)
         .frame(width: 270)
+        .modifier(PopupGlassStyle(enabled: model.liquidGlassEnabled))
+    }
+}
+
+private struct PopupGlassStyle: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), enabled {
+            content.glassEffect(.regular, in: .rect(cornerRadius: 16))
+        } else {
+            content
+        }
     }
 }
 

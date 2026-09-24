@@ -13,6 +13,7 @@ struct UsageWindowDisplay: Identifiable {
 
 @MainActor
 final class CodexStatusModel: ObservableObject {
+    private static let liquidGlassPreferenceKey = "liquidGlassEnabled"
     private static let menuBarDisplayModePreferenceKey = "menuBarDisplayMode"
     private static let lastUpdateCheckAtPreferenceKey = "lastUpdateCheckAt"
     private static let dismissedUpdateVersionPreferenceKey = "dismissedUpdateVersion"
@@ -31,6 +32,9 @@ final class CodexStatusModel: ObservableObject {
     @Published private(set) var updateErrorText: String?
     @Published private(set) var launchAtLoginStatusText: String?
     @Published private(set) var lastUpdateCheckAt: Date?
+    @Published var liquidGlassEnabled: Bool {
+        didSet { defaults.set(liquidGlassEnabled, forKey: Self.liquidGlassPreferenceKey) }
+    }
     @Published var launchAtLoginEnabled: Bool
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
         didSet {
@@ -57,6 +61,7 @@ final class CodexStatusModel: ObservableObject {
         appVersionText = appVersion
         self.updateChecker = updateChecker
         self.defaults = defaults
+        liquidGlassEnabled = defaults.bool(forKey: Self.liquidGlassPreferenceKey)
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         menuBarDisplayMode = Self.readMenuBarDisplayMode(defaults: defaults)
         lastUpdateCheckAt = Self.readLastUpdateCheckAt(defaults: defaults)
