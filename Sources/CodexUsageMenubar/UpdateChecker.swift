@@ -17,8 +17,22 @@ struct AvailableUpdate: Equatable {
     let releaseUrl: URL
     let minimumMacOS: String
 
+    var isCompatible: Bool {
+        supports(ProcessInfo.processInfo.operatingSystemVersion)
+    }
+
+    func supports(_ operatingSystem: OperatingSystemVersion) -> Bool {
+        let parts = minimumMacOS.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...3).contains(parts.count),
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else { return false }
+        let normalized = (parts.map(String.init) + Array(repeating: "0", count: 3 - parts.count)).joined(separator: ".")
+        guard let required = SemanticVersion(normalized),
+              let current = SemanticVersion("\(operatingSystem.majorVersion).\(operatingSystem.minorVersion).\(operatingSystem.patchVersion)") else { return false }
+        return current >= required
+    }
+
     var canInstallInApp: Bool {
-        zipUrl != nil && sha256?.isEmpty == false
+        isCompatible && zipUrl != nil && sha256?.isEmpty == false
     }
 }
 

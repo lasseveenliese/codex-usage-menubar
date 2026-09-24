@@ -19,9 +19,10 @@ cd codex-usage-menubar
 ./start.command
 ```
 
-The app reads usage from the local Codex app server and uses recent Codex session logs from `~/.codex` as a short-lived fallback.
+The app reads usage from the local Codex app server.
 Set `CODEX_HOME` before launching if your data lives elsewhere.
-To simulate values at launch, set `CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT` and `CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_USED_PERCENT`.
+To simulate remaining availability at launch, set `CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_AVAILABLE_PERCENT` and `CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_AVAILABLE_PERCENT`.
+The older `*_USED_PERCENT` names remain supported as aliases for available percentages.
 The app only reads local Codex data and does not send usage information to external services.
 It checks GitHub periodically for app updates, but that request does not include Codex usage data.
 
@@ -42,6 +43,8 @@ If you trust it, right-click the app in `Applications` and choose `Open`, or use
 ## Notes
 
 - Updates once per minute.
-- Checks for app updates on launch and at most every 12 hours.
+- Checks for app updates on launch and every 12 hours while running.
+- “Later” hides that version from automatic checks; a manual check shows it again.
+- Update installation requires a compatible macOS version.
 - Can install app updates from the release ZIP after a checksum check.
 - Shows `Usage unavailable` instead of percentages when no complete, valid, and recent Codex data is available.

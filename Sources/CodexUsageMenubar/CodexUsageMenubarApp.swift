@@ -114,6 +114,7 @@ final class StatusItemController: NSObject {
         if popover.isShown {
             closePopover()
         } else {
+            model.syncLaunchAtLoginStatus()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }
@@ -130,38 +131,31 @@ final class StatusItemController: NSObject {
         button.imagePosition = .noImage
         statusItem.length = NSStatusItem.variableLength
 
+        let image: NSImage
         switch model.menuBarDisplayMode {
         case .classic:
-            let image = MenuBarImageRenderer.classic(
+            image = MenuBarImageRenderer.classic(
                 columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
-            button.attributedTitle = NSAttributedString(string: "")
-            button.image = image
-            button.imagePosition = .imageOnly
-            statusItem.length = image.size.width
         case .stacked:
-            let image = MenuBarImageRenderer.stacked(
+            image = MenuBarImageRenderer.stacked(
                 columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
-            button.attributedTitle = NSAttributedString(string: "")
-            button.image = image
-            button.imagePosition = .imageOnly
-            statusItem.length = image.size.width
         case .rings:
-            let image = MenuBarImageRenderer.rings(
+            image = MenuBarImageRenderer.rings(
                 columns: menuBarColumns,
                 loadingProgress: refreshAnimationProgress,
                 usesLightMenuBarText: usesLightMenuBarText
             )
-            button.attributedTitle = NSAttributedString(string: "")
-            button.image = image
-            button.imagePosition = .imageOnly
-            statusItem.length = image.size.width
         }
+        button.attributedTitle = NSAttributedString(string: "")
+        button.image = image
+        button.imagePosition = .imageOnly
+        statusItem.length = image.size.width
 
         button.toolTip = model.usageLoadFailed
             ? "Codex usage unavailable; availability is hidden until a verified refresh succeeds"
@@ -469,6 +463,12 @@ private struct MenuContent: View {
                 UpdateStatusView(model: model, text: updateStatusText)
             }
 
+            if let errorText = model.updateErrorText {
+                Text(errorText)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             if model.usageLoadFailed {
                 Text("Live refresh failed. Availability is hidden until a verified refresh succeeds.")
                     .font(.caption)
@@ -528,6 +528,12 @@ private struct MenuContent: View {
             .toggleStyle(.checkbox)
             .disabled(model.isUpdatingLaunchAtLogin)
 
+            if let statusText = model.launchAtLoginStatusText {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 10) {
                     Button {
@@ -576,15 +582,20 @@ private struct UpdateStatusView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if case .available = model.updateState {
+            if case .available(let update) = model.updateState {
+                if !update.isCompatible {
+                    Text("Requires macOS \(update.minimumMacOS) or later.")
+                        .font(.caption)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button("Install") {
+                        Button(update.canInstallInApp ? "Install" : "Download") {
                             Task {
                                 await model.installAvailableUpdate()
                             }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(!update.isCompatible)
 
                         Button("Later") {
                             model.dismissAvailableUpdate()
@@ -592,7 +603,7 @@ private struct UpdateStatusView: View {
                         .buttonStyle(.bordered)
                     }
 
-                    Button("Download untrusted DMG") {
+                    Button("Download DMG") {
                         model.openAvailableUpdateDownload()
                     }
                     .buttonStyle(.link)
@@ -668,12 +679,12 @@ private struct AvailabilityBar: View {
     private var barColor: Color {
         guard let availablePercent else { return Color(nsColor: .secondarySystemFill) }
 
-        switch availablePercent {
-        case 25...100:
+        switch MenuBarTone.from(availablePercent: availablePercent) {
+        case .normal:
             return Color(nsColor: .systemGreen)
-        case 10..<25:
+        case .warning:
             return Color(nsColor: .systemOrange)
-        default:
+        case .critical:
             return Color(nsColor: .systemRed)
         }
     }

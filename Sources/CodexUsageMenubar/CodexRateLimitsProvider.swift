@@ -157,8 +157,10 @@ final class CodexRateLimitsProvider {
     ) -> CodexRateLimitsSnapshot? {
         guard
             let primaryDisplayPercent = launchInt(
-                flag: "--simulate-primary-used-percent",
+                flag: "--simulate-primary-available-percent",
+                legacyFlag: "--simulate-primary-used-percent",
                 environmentKeys: [
+                    "CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_AVAILABLE_PERCENT",
                     "CODEX_USAGE_MENUBAR_SIMULATE_PRIMARY_USED_PERCENT",
                     "CODEX_LIMITBAR_SIMULATE_PRIMARY_USED_PERCENT"
                 ],
@@ -166,8 +168,10 @@ final class CodexRateLimitsProvider {
                 environment: environment
             ),
             let secondaryDisplayPercent = launchInt(
-                flag: "--simulate-secondary-used-percent",
+                flag: "--simulate-secondary-available-percent",
+                legacyFlag: "--simulate-secondary-used-percent",
                 environmentKeys: [
+                    "CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_AVAILABLE_PERCENT",
                     "CODEX_USAGE_MENUBAR_SIMULATE_SECONDARY_USED_PERCENT",
                     "CODEX_LIMITBAR_SIMULATE_SECONDARY_USED_PERCENT"
                 ],
@@ -211,11 +215,12 @@ final class CodexRateLimitsProvider {
 
     private static func launchInt(
         flag: String,
+        legacyFlag: String,
         environmentKeys: [String],
         arguments: [String],
         environment: [String: String]
     ) -> Int? {
-        guard let value = launchValue(flag: flag, environmentKeys: environmentKeys, arguments: arguments, environment: environment) else {
+        guard let value = launchValue(flag: flag, legacyFlag: legacyFlag, environmentKeys: environmentKeys, arguments: arguments, environment: environment) else {
             return nil
         }
 
@@ -224,11 +229,16 @@ final class CodexRateLimitsProvider {
 
     private static func launchValue(
         flag: String,
+        legacyFlag: String,
         environmentKeys: [String],
         arguments: [String],
         environment: [String: String]
     ) -> String? {
         if let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) {
+            return arguments[index + 1]
+        }
+
+        if let index = arguments.firstIndex(of: legacyFlag), arguments.indices.contains(index + 1) {
             return arguments[index + 1]
         }
 
